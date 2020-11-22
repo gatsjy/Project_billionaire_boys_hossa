@@ -7,9 +7,7 @@
     - [ ]  조건 추가해서 내가 원하는 값 얻어 낼 수 있는지에 대해서 
 
 ## 1. 첫번째 나에게 닥친 시련
-
-![https://s3-us-west-2.amazonaws.com/secure.notion-static.com/399b95c1-77d2-4488-b21d-339615e22107/Untitled.png](https://s3-us-west-2.amazonaws.com/secure.notion-static.com/399b95c1-77d2-4488-b21d-339615e22107/Untitled.png)
-
+- 키움 API 에 접속이 안되던 문제..
 - 해결법 1. 버전호환이 안되서 그럼 [https://grand-unified-engine.tistory.com/5](https://grand-unified-engine.tistory.com/5) 참고
 - 해결법 2. 관리자로 접근 안해서 그럼 [https://www.codingfactory.net/11743](https://www.codingfactory.net/11743)
 - 파이썬, 아나콘다 32비트로 다운 받아야지 실행된다고함 (난 처음부터 32비트로 다운 받은 상태였음..)
