@@ -6,6 +6,8 @@ import os
 import random
 import time
 
+print(Test)
+
 if __name__ == "__main__":
 
     ####################################################
