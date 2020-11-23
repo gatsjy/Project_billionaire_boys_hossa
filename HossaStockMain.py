@@ -133,8 +133,6 @@ if __name__ == "__main__":
     today = datetime.today().strftime("%Y.%m.%d")
     stock_df = pd.read_excel("./resource/코스닥.xlsx")
     stock_list = pd.DataFrame(stock_df, columns=["회사명", "종목코드"])
-    ##날짜 갖고오기 (2020.11.19)
-    today = datetime.today().strftime("%Y.%m.%d")
 
     not_mentioned_stock_list = []
 
@@ -173,9 +171,9 @@ if __name__ == "__main__":
     ### 4,5,6 조건은 네이버 주식 부분 파싱해서 결정해야 할 듯
     ##print(datetime.today().strftime("%Y%m%d0900"))
     ##print(datetime.today().strftime("%Y%m%d1530"))
-    today2 = '202011200901' # 1분으로 설정하면 첫번째 가격을 알 수 있음
-    yesterdaylast = '202011191531' # 31분으로 설정하면 마지막 가격을 알 수 있음
-    yesterdayfirst = '202011190901' # 31분으로 설정하면 마지막 가격을 알 수 있음
+    today2 = '202011230901' # 1분으로 설정하면 첫번째 가격을 알 수 있음
+    yesterdaylast  = '202011201531' # 31분으로 설정하면 마지막 가격을 알 수 있음
+    yesterdayfirst = '202011200901' # 01분으로 설정하면 첫번째 가격을 알 수 있음
 
     # 4,5,6 조건을 담을 새로운 리스트 생성
     new_stock_list = list()
@@ -217,12 +215,13 @@ if __name__ == "__main__":
 
         # 4. 전일 9시00분 거래량 < 금일 9시 00분 거래량
         if prevFirstTradesVolume < todayTradesVolume:
-            # 5. 금일 시가(9시00분) 상승률이 전일종가대비 4% 미만
-            # 5.1 위 로직을 계산하려면 하나의 조건 문이 더 추가 되어야함
-            if todayFirstPrice > prevLastPrice:
-                if ((todayFirstPrice-prevLastPrice) / prevLastPrice * 100) < 4:
-                    # 6. 금일 9시00분 종가가 4% 미만 ( 뭐에 기준에서 4% 미만인지?)
-                    new_stock_num_list.append(stock)
+            # 7. 전일 15시 30분 거래량 < 금일 9시 00분 거래량
+            if prevLastTradesVolume < todayTradesVolume:
+                # 5. 금일 시가(9시00분) 상승률이 전일종가대비 4% 미만
+                # 5.1 위 로직을 계산하려면 하나의 조건 문이 더 추가 되어야함
+                if todayFirstPrice > prevLastPrice:
+                    if ((todayFirstPrice-prevLastPrice) / prevLastPrice * 100) < 4:
+                        new_stock_num_list.append(stock)
 
     ###키움 api 접속하는 부분 입니다
     app = QApplication(sys.argv)
@@ -242,8 +241,6 @@ if __name__ == "__main__":
 
     # 7. 금일 시가(9시00분) 매수세 > 매도세 -> 이건 아직도 어떤 걸 표현한 건지 모르겠다...
     ConditionSevendf = list(map(int,pd.DataFrame(kiwoom.ohlcv)["종목코드"]));
-    #print(ConditionSevendf)
-    #print(new_stock_num_list)
     # 두 리스트의 교집합을 찾는다
     res = list(set(ConditionSevendf).intersection(new_stock_num_list))
 
