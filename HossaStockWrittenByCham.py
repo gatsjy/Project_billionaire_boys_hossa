@@ -63,7 +63,7 @@ if __name__ == "__main__":
         
     else : 
         for stock in stock_list["회사명"], stock_list["종목코드"]:
-            url = f"https://search.naver.com/search.naver?where=news&query={stock}&sm=tab_opt&sort=0&photo=0&field=1&reporter_article=&pd=3&ds={today}&de={today}&mynews=0&refresh_start=0&related=0"
+            url = f"https://search.naver.com/search.naver?where=news&query={stock}&sm=tab_opt&sort=0&photo=0&field=1&reporter_article=&pd=3&ds={D_day}&de={D_day}&mynews=0&refresh_start=0&related=0"
             raw = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
 
             #delay_time = random.random() + random.random()
