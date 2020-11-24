@@ -136,16 +136,14 @@ if __name__ == "__main__":
     kiwoom.set_input_value("정렬구분", "1")
     kiwoom.set_input_value("시간구분", "2")
     kiwoom.set_input_value("거래량구분", "5")
-    kiwoom.set_input_value("시간", "10")
+    kiwoom.set_input_value("시간", "1")
     kiwoom.set_input_value("종목조건", "0")
     kiwoom.set_input_value("가격구분", "8")
     kiwoom.comm_rq_data("OPT10023_req", "OPT10023", 0, "0101")
     #stock_list["종목코드"]
     df = list(map(int,pd.DataFrame(kiwoom.ohlcv)["종목코드"]));
-    list_a = [1, 2, 3, 4]
 
-    intersection = list(set(df).intersection(list_a))
-    print(intersection)
+    print(df)
 
 
 

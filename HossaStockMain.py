@@ -171,9 +171,9 @@ if __name__ == "__main__":
     ### 4,5,6 조건은 네이버 주식 부분 파싱해서 결정해야 할 듯
     ##print(datetime.today().strftime("%Y%m%d0900"))
     ##print(datetime.today().strftime("%Y%m%d1530"))
-    today2 = '202011230901' # 1분으로 설정하면 첫번째 가격을 알 수 있음
-    yesterdaylast  = '202011201531' # 31분으로 설정하면 마지막 가격을 알 수 있음
-    yesterdayfirst = '202011200901' # 01분으로 설정하면 첫번째 가격을 알 수 있음
+    today2 = '202011240901' # 1분으로 설정하면 첫번째 가격을 알 수 있음
+    yesterdaylast  = '202011231531' # 31분으로 설정하면 마지막 가격을 알 수 있음
+    yesterdayfirst = '202011230901' # 01분으로 설정하면 첫번째 가격을 알 수 있음
 
     # 4,5,6 조건을 담을 새로운 리스트 생성
     new_stock_list = list()
@@ -216,12 +216,12 @@ if __name__ == "__main__":
         # 4. 전일 9시00분 거래량 < 금일 9시 00분 거래량
         if prevFirstTradesVolume < todayTradesVolume:
             # 7. 전일 15시 30분 거래량 < 금일 9시 00분 거래량
-            if prevLastTradesVolume < todayTradesVolume:
-                # 5. 금일 시가(9시00분) 상승률이 전일종가대비 4% 미만
-                # 5.1 위 로직을 계산하려면 하나의 조건 문이 더 추가 되어야함
-                if todayFirstPrice > prevLastPrice:
-                    if ((todayFirstPrice-prevLastPrice) / prevLastPrice * 100) < 4:
-                        new_stock_num_list.append(stock)
+            #if prevLastTradesVolume < todayTradesVolume:
+            # 5. 금일 시가(9시00분) 상승률이 전일종가대비 4% 미만
+            # 5.1 위 로직을 계산하려면 하나의 조건 문이 더 추가 되어야함
+            if todayFirstPrice > prevLastPrice:
+                if ((todayFirstPrice-prevLastPrice) / prevLastPrice * 100) < 4:
+                    new_stock_num_list.append(stock)
 
     ###키움 api 접속하는 부분 입니다
     app = QApplication(sys.argv)
