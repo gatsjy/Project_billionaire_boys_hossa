@@ -11,17 +11,85 @@ from PyQt5.QtTest import QTest
 
 from config.errorCode import *
 
+### telegram 관련 import ##
+import telegram
+
+import requests
+from bs4 import BeautifulSoup
+from datetime import datetime
+import pandas as pd
+import os
+import random
+import time
+
 class Kiwoom(QAxWidget):
     def __init__(self):
         super().__init__()
         print("Kiwoom() class start.")
 
-        ######### event loop를 실행하기 위한 변수 모음
-        self.login_event_loop = QEventLoop() #로그인 요청용 이벤트루프
-        self.detail_account_info_event_loop = None # 예수금 요청용 이벤트 루프
-        self.calculator_event_loop = QEventLoop()
+        #############################################
+        ## 키움 api 시작하기 전에 네이버 크롤링을 통해 원하는 데이터를 가져와서 비교하는 로직 입니다
+        #############################################
+        # 1. 1400개의 코스닥 종목
+        stock_df = pd.read_excel("./resource/코스닥.xlsx")
+        stock_df['종목코드'] = stock_df['종목코드'].apply(lambda x: "{:0>6d}".format(x))  # 종목코드 string변환
+        # 2. 전 종목 뉴스 크롤링 중 언급 된 적 없는 리스트 추출
+        stock_list = pd.DataFrame(stock_df, columns=["종목코드"])
 
-        #self.tradeHigh_kiwoom_db_event_loop = QEventLoop() # 거래량 급증 이벤트 루프
+        ##############################test용 설정 ####################################
+        stock_list = stock_list[:10]['종목코드']
+        #stock_list = stock_list['종목코드']
+        ##############################################################################
+
+        today2 = '20201127090000'  # 1분으로 설정하면 첫번째 가격을 알 수 있음
+
+        yesterdaylast = '20201126153000'
+        yesterdayfirst = '20201126090100'
+
+        # 4,5,6 조건을 담을 새로운 리스트 생성
+        new_stock_num_list = []
+        self.stock_info_list = {}
+        info_list = {}
+
+        ## * 참고 : [0] : 체결시각 [1] : 체결가 [2] : 전일비 [3] : 매도 [4] : 매수 [5] : 거래량 [6] : 변동량
+        # 9시 되기전에 준비되어야 할 데이터 목록 정의
+        # 9시 되기 되기 전에 가져와야 할 것
+        # 전일 종가, 전일 15시 30분 변동량, 전일 9시00분 변동량,
+        for stock in stock_list:
+            # 전일 마지막 거래 상세 가져오기
+            yesterdaylasturl = f"https://finance.naver.com/item/sise_time.nhn?code={stock}&thistime={yesterdaylast}"
+            raw = requests.get(yesterdaylasturl, headers={'User-Agent': 'Mozilla/5.0'})
+            yesterdaylasthtml = BeautifulSoup(raw.text, "html.parser")
+            yesterdaylastPrices = yesterdaylasthtml.select('body > table.type2 > tr:nth-child(3) > td > span')
+
+            # 전일 첫번째 거래 상세 가져오기
+            yesterdayfirsturl = f"https://finance.naver.com/item/sise_time.nhn?code={stock}&thistime={yesterdayfirst}"
+            raw = requests.get(yesterdayfirsturl, headers={'User-Agent': 'Mozilla/5.0'})
+            yesterdayfirsthtml = BeautifulSoup(raw.text, "html.parser")
+            yesterdayfirstPrices = yesterdayfirsthtml.select('body > table.type2 > tr:nth-child(3) > td > span')
+
+            stock_info = {}
+            if len(yesterdaylastPrices) > 5:
+                prevLastTradesVolume = int(yesterdaylastPrices[6].text.replace(',', ''))
+                prevLastPrice = int(yesterdaylastPrices[1].text.replace(',', ''))
+                stock_info['prevLastTradesVolume'] = prevLastTradesVolume
+                stock_info['prevLastPrice'] = prevLastPrice
+
+            if len(yesterdayfirstPrices) > 5:
+                prevFirstTradesVolume = int(yesterdayfirstPrices[6].text.replace(',', ''))
+                stock_info['prevFirstTradesVolume'] = prevFirstTradesVolume
+
+            self.stock_info_list.update({stock: stock_info})
+
+        # 9시에 돌려서 해당 현재일자의 거래량, 초기가격을 가져옵니다.
+        ######### 키움관련 api 시작 ###############
+        ######### event loop를 실행하기 위한 변수 모음
+        self.login_event_loop = QEventLoop()  # 로그인 요청용 이벤트루프
+        # self.detail_account_info_event_loop = None # 예수금 요청용 이벤트 루프
+        # self.calculator_event_loop = QEventLoop()
+        # self.request_stock_price = None # 업종별주가요청
+
+        self.tradeHigh_kiwoom_db_event_loop = QEventLoop()  # 거래량 급증 이벤트 루프
         #########################################
 
         ### 계좌 관련된 변수 ###
@@ -36,6 +104,8 @@ class Kiwoom(QAxWidget):
         #########################################
 
         #### 종목 분석 용
+        ### 거래량 급증
+        ### 0 : 종목코드 / 1 : 종목명 / 2 : 현재가 / 3 : 전일대비기호 / 4 : 전일대비 / 5 : 등락률 / 6 : 이전거래량 / 7 : 현재거래량 / 8 : 급증량
         self.calcul_data = []
         #####################
         #### 거래량 급증 종목 분석 용
@@ -49,14 +119,67 @@ class Kiwoom(QAxWidget):
 
         ########## 초기 셋팅 함수들 바로 실행
         self.get_ocx_instance() # OCX 방식을 파이썬에 사용할 수 있게 변환해주는 함수
-        self.event_slots() # 키움과 연결하기 위한 시그널/ 슬롯 모음
+        self.event_slots() # 키움과 연결하기 위한 시그널/슬롯 모음
         self.signal_login_commConnect() # 로그인 요청 함수 포함
-        self.get_account_info() # 계좌번호 가져오기
-        self.detail_account_info() # 예수금 요청 시그널 포함
+        #self.get_account_info() # 계좌번호 가져오기
+        #self.detail_account_info() # 예수금 요청 시그널 포함
         #self.detail_account_mystock() # 계좌평가잔고내역 가져오기
         #self.calculator_fnc()
         self.tradeHigh_kiwoom_db() # 거래량급증요청
         ############################################
+
+        ## 거래량 급증 데이터 할당
+        for stock in self.calcul_data:
+            if stock[0] in self.stock_info_list :
+                self.stock_info_list[stock[0]]['todayTradesVolume'] = stock[2]
+                self.stock_info_list[stock[0]]['todayFirstPrice'] = stock[1]
+            else :
+                pass
+
+        ## 조건식 계산
+        for item in self.stock_info_list.items():
+            if len(item[1]) > 4 :
+                todayTradesVolume = int(item[1]['todayTradesVolume'])
+                todayFirstPrice = int(item[1]['todayFirstPrice'][1:])
+                prevFirstTradesVolume = int(item[1]['prevFirstTradesVolume'])
+                prevLastPrice = int(item[1]['prevLastPrice'])
+                # 4. 전일 9시00분 거래량 < 금일 9시 00분 거래량
+                if prevFirstTradesVolume < todayTradesVolume:
+                    # 7. 전일 15시 30분 거래량 < 금일 9시 00분 거래량
+                    # if prevLastTradesVolume < todayTradesVolume:
+                    # 5. 금일 시가(9시00분) 상승률이 전일종가대비 4% 미만
+                    # 5.1 위 로직을 계산하려면 하나의 조건 문이 더 추가 되어야함
+                    if todayFirstPrice > prevLastPrice:
+                        if ((todayFirstPrice - prevLastPrice) / prevLastPrice * 100) < 4:
+                            new_stock_num_list.append(item[0])
+
+        #print(new_stock_num_list)
+
+        ## telegram 푸시 메세지 관련 코드
+        telgm_token = "1308465026:AAHOrMFyULrupxEnhkPIsNjGJ0o-4uF0q7U"
+        bot = telegram.Bot(telgm_token)
+
+        for stock in new_stock_num_list:
+            # 729845849 , -1001360628906
+            bot.sendMessage('729845849', stock)
+            # 보내고 3초동안 쉬기.. 1분에 20개의 메세지 밖에 보내지 못한다.
+            time.sleep(3);
+        ###############################
+
+        # 9시 01분부터 데이터 가져와야 할 부분
+        ## 스케쥴링을 통해 정확히 9시01분부터 돌리기 시작합니다...
+        for stock in stock_list:
+            # 오늘 거래 상세 가져오기
+            todayurl = f"https://finance.naver.com/item/sise_time.nhn?code={stock}&thistime={today2}"
+            raw = requests.get(todayurl, headers={'User-Agent': 'Mozilla/5.0'})
+            todayurlhtml = BeautifulSoup(raw.text, "html.parser")
+            todayPrices = todayurlhtml.select('body > table.type2 > tr:nth-child(3) > td > span')
+
+            if len(todayPrices) > 5:
+                todayTradesVolume = int(todayPrices[5].text.replace(',', ''))
+                todayFirstPrice = int(todayPrices[1].text.replace(',', ''))
+                self.stock_info_list[stock]['todayTradesVolume'] = todayTradesVolume
+                self.stock_info_list[stock]['todayFirstPrice'] = todayFirstPrice
 
     def get_ocx_instance(self):
         self.setControl("KHOPENAPI.KHOpenAPICtrl.1") #레지스트리에 저장된 API 모듈 불러오기
@@ -252,12 +375,6 @@ class Kiwoom(QAxWidget):
                                 print("포착된 부분의 일봉 저가가 오늘자 일봉의 고가보다 낮은지 확인")
                                 pass_success = True
 
-
-
-
-
-
-
         elif sRQName == "거래량급증요청":
             cnt = self.dynamicCall("GetRepeatCnt(QString, QString)", sTrCode, sRQName)
 
@@ -265,28 +382,26 @@ class Kiwoom(QAxWidget):
                 data = []
 
                 info1 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "종목코드")
-                info2 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "종목명")
+                #info2 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "종목명")
                 info3 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "현재가")
-                info4 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "전일대비기호")
-                info5 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "전일대비")
-                info6 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "등락률")
-                info7 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "이전거래량")
+                #info4 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "전일대비기호")
+                #info5 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "전일대비")
+                #info6 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "등락률")
+                #info7 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "이전거래량")
                 info8 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "현재거래량")
-                info9 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "급증량")
-                info10 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "급증률")
+                #info9 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "급증량")
+                #info10 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "급증률")
 
-                data.append("")
                 data.append(info1.strip())
-                data.append(info2.strip())
+                #data.append(info2.strip())
                 data.append(info3.strip())
-                data.append(info4.strip())
-                data.append(info5.strip())
-                data.append(info6.strip())
-                data.append(info7.strip())
+                #data.append(info4.strip())
+                #data.append(info5.strip())
+                #data.append(info6.strip())
+                #data.append(info7.strip())
                 data.append(info8.strip())
-                data.append(info9.strip())
-                data.append(info10.strip())
-                data.append("")
+                #data.append(info9.strip())
+                #data.append(info10.strip())
 
                 self.calcul_data.append(data.copy())
 

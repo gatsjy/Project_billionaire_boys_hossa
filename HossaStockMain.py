@@ -125,61 +125,29 @@ if __name__ == "__main__":
 
     #1. 1400개의 코스닥 종목
     stock_df = pd.read_excel("./resource/코스닥.xlsx")
+    stock_df['종목코드'] = stock_df['종목코드'].apply(lambda x: "{:0>6d}".format(x)) #종목코드 string변환
 
-    #2. 우선주 / 스택주 / 동전주(1000원 미만) 제외
-    #2-1. 어떻게 골라낼 것인지?
-
-    #3. 전 종목 뉴스 크롤링 중 언급 된 적 없는 리스트 추출
-    today = datetime.today().strftime("%Y.%m.%d")
-    stock_df = pd.read_excel("./resource/코스닥.xlsx")
-    stock_list = pd.DataFrame(stock_df, columns=["회사명", "종목코드"])
-
-    not_mentioned_stock_list = []
+    #2. 전 종목 뉴스 크롤링 중 언급 된 적 없는 리스트 추출
+    stock_list = pd.DataFrame(stock_df, columns=["종목코드"])
 
     ##############################test용 설정 ####################################
-    #stock_list = stock_list[:10]
+    stock_list = stock_list[:10]['종목코드']
     ##############################################################################
 
-    for stock in stock_list["회사명"], stock_list["종목코드"]:
-        url = f"https://search.naver.com/search.naver?where=news&query={stock}&sm=tab_opt&sort=0&photo=0&field=1&reporter_article=&pd=3&ds={today}&de={today}&mynews=0&refresh_start=0&related=0"
-        raw = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
+    today2 = '20201124090000' # 1분으로 설정하면 첫번째 가격을 알 수 있음
 
-        # delay_time = random.random() + random.random()
-        # time.sleep(delay_time)
-        # requests응답이 없을 경우.
-        if raw.status_code != requests.codes.ok:
-            print("접속실패")
-
-        html = BeautifulSoup(raw.text, "html.parser")
-        news_wrappers = html.select('ul.list_news > li')
-
-        cnt = 0
-
-        for resources in news_wrappers:
-            title = resources.select_one("a.news_tit").text
-            cnt += 1
-
-        if cnt == 0:
-            not_mentioned_stock_list.append(stock)
-
-    stock_num_list = not_mentioned_stock_list[1]
-    ##############################test용 설정 ####################################
-    #stock_list = stock_list[:100]
-    #stock_num_list = stock_num_List[:100]
-    ##############################################################################
-
-    ### 4,5,6 조건은 네이버 주식 부분 파싱해서 결정해야 할 듯
-    ##print(datetime.today().strftime("%Y%m%d0900"))
-    ##print(datetime.today().strftime("%Y%m%d1530"))
-    today2 = '202011240901' # 1분으로 설정하면 첫번째 가격을 알 수 있음
-    yesterdaylast  = '202011231531' # 31분으로 설정하면 마지막 가격을 알 수 있음
-    yesterdayfirst = '202011230901' # 01분으로 설정하면 첫번째 가격을 알 수 있음
+    yesterdaylast  = '20201123153000'
+    yesterdayfirst = '20201123090100'
 
     # 4,5,6 조건을 담을 새로운 리스트 생성
-    new_stock_list = list()
-    new_stock_num_list = list()
+    new_stock_num_list = ()
+    stock_info_list = {}
 
-    for stock in stock_num_list:
+    ## * 참고 : [0] : 체결시각 [1] : 체결가 [2] : 전일비 [3] : 매도 [4] : 매수 [5] : 거래량 [6] : 변동량
+    # 9시 되기전에 준비되어야 할 데이터 목록 정의
+    # 9시 되기 되기 전에 가져와야 할 것
+    # 전일 종가, 전일 15시 30분 변동량, 전일 9시00분 변동량,
+    for stock in stock_list:
         # 전일 마지막 거래 상세 가져오기
         yesterdaylasturl = f"https://finance.naver.com/item/sise_time.nhn?code={stock}&thistime={yesterdaylast}"
         raw = requests.get(yesterdaylasturl, headers={'User-Agent': 'Mozilla/5.0'})
@@ -192,63 +160,41 @@ if __name__ == "__main__":
         yesterdayfirsthtml = BeautifulSoup(raw.text, "html.parser")
         yesterdayfirstPrices = yesterdayfirsthtml.select('body > table.type2 > tr:nth-child(3) > td > span')
 
+        stock_info = {}
+        if len(yesterdaylastPrices) > 5:
+            prevLastTradesVolume = int(yesterdaylastPrices[6].text.replace(',', ''))
+            prevLastPrice = int(yesterdaylastPrices[1].text.replace(',', ''))
+            stock_info['prevLastTradesVolume'] = prevLastTradesVolume
+            stock_info['prevLastPrice'] = prevLastPrice
+
+        if len(yesterdayfirstPrices) > 5:
+            prevFirstTradesVolume = int(yesterdayfirstPrices[6].text.replace(',', ''))
+            stock_info['prevFirstTradesVolume'] = prevFirstTradesVolume
+
+        stock_info_list.update({stock:stock_info})
+
+    # 9시 01분부터 데이터 가져와야 할 부분
+    ## 스케쥴링을 통해 정확히 9시01분부터 돌리기 시작합니다...
+    for stock in stock_list:
         # 오늘 거래 상세 가져오기
         todayurl = f"https://finance.naver.com/item/sise_time.nhn?code={stock}&thistime={today2}"
         raw = requests.get(todayurl, headers={'User-Agent': 'Mozilla/5.0'})
         todayurlhtml = BeautifulSoup(raw.text, "html.parser")
         todayPrices = todayurlhtml.select('body > table.type2 > tr:nth-child(3) > td > span')
 
-        ## * 참고 : [0] : 체결시각 [1] : 체결가 [2] : 전일비 [3] : 매도 [4] : 매수 [5] : 거래량 [6] : 변동량
-        ## 필요한 정보 1. 전일 거래량 , 금일 거래량
-        ## 필요한 정보 2. 전일 종가, 금일 시가
-        ## 필요한 정보 3. 전일 첫 거래량
-        if len(yesterdaylastPrices) > 5:
-            prevLastTradesVolume = int(yesterdaylastPrices[5].text.replace(',',''))
-            prevLastPrice = int(yesterdaylastPrices[1].text.replace(',', ''))
-
         if len(todayPrices) > 5:
             todayTradesVolume = int(todayPrices[5].text.replace(',',''))
             todayFirstPrice = int(todayPrices[1].text.replace(',', ''))
+            stock_info_list[stock]['todayTradesVolume'] = todayTradesVolume
+            stock_info_list[stock]['todayFirstPrice'] = todayFirstPrice
 
-        if len(yesterdayfirstPrices) > 5:
-            prevFirstTradesVolume = int(yesterdayfirstPrices[5].text.replace(',',''))
-
-        # 4. 전일 9시00분 거래량 < 금일 9시 00분 거래량
-        if prevFirstTradesVolume < todayTradesVolume:
-            # 7. 전일 15시 30분 거래량 < 금일 9시 00분 거래량
-            #if prevLastTradesVolume < todayTradesVolume:
-            # 5. 금일 시가(9시00분) 상승률이 전일종가대비 4% 미만
-            # 5.1 위 로직을 계산하려면 하나의 조건 문이 더 추가 되어야함
-            if todayFirstPrice > prevLastPrice:
-                if ((todayFirstPrice-prevLastPrice) / prevLastPrice * 100) < 4:
-                    new_stock_num_list.append(stock)
-
-    ###키움 api 접속하는 부분 입니다
-    app = QApplication(sys.argv)
-    kiwoom = Kiwoom()
-    kiwoom.comm_connect()
-    kiwoom.ohlcv = {"종목코드": []}
-
-    # OPT10023(거래량급증요청) tr 관련
-    kiwoom.set_input_value("시장구분", "101")
-    kiwoom.set_input_value("정렬구분", "1")
-    kiwoom.set_input_value("시간구분", "2")
-    kiwoom.set_input_value("거래량구분", "5")
-    kiwoom.set_input_value("시간", "10")
-    kiwoom.set_input_value("종목조건", "0")
-    kiwoom.set_input_value("가격구분", "8")
-    kiwoom.comm_rq_data("OPT10023_req", "OPT10023", 0, "0101")
-
-    # 7. 금일 시가(9시00분) 매수세 > 매도세 -> 이건 아직도 어떤 걸 표현한 건지 모르겠다...
-    ConditionSevendf = list(map(int,pd.DataFrame(kiwoom.ohlcv)["종목코드"]));
-    # 두 리스트의 교집합을 찾는다
-    res = list(set(ConditionSevendf).intersection(new_stock_num_list))
 
     ## telegram 푸시 메세지 관련 코드
     telgm_token = "1308465026:AAHOrMFyULrupxEnhkPIsNjGJ0o-4uF0q7U"
     bot = telegram.Bot(telgm_token)
 
-    for stock in res:
-        bot.sendMessage('-1001360628906', stock)
+    for stock in new_stock_num_list:
+        # 729845849 , -1001360628906
+        bot.sendMessage('729845849', stock)
         # 보내고 3초동안 쉬기.. 1분에 20개의 메세지 밖에 보내지 못한다.
         time.sleep(3);
