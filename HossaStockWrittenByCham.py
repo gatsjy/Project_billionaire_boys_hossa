@@ -14,8 +14,9 @@ def printDayOfTheWeek (today):
     month = int(today[5:7])
     day =  int(today[-2:])
     D_day_1_ago = f"{year}.{month}.{day-1}"
+    D_day_2_ago = f"{year}.{month}.{day-2}"
     D_day_3_ago = f"{year}.{month}.{day-3}"
-    return dayOfTheWeek[date(year, month, day).weekday()],D_day_1_ago,D_day_3_ago
+    return dayOfTheWeek[date(year, month, day).weekday()],D_day_1_ago,D_day_3_ago,D_day_2_ago
 
 if __name__ == "__main__":
 
@@ -28,20 +29,43 @@ if __name__ == "__main__":
 
     ##날짜 갖고오기 (2020.11.19)
     today = datetime.today().strftime("%Y.%m.%d")
-    dayOfTheWeek,D_day_1_ago,D_day_3_ago = printDayOfTheWeek(today)
-    
+    dayOfTheWeek,D_day_1_ago,D_day_3_ago,D_day_2_ago = printDayOfTheWeek(today)
     
     ##조건0. OUTPUT = raw_step_data, 코스닥 종목+종가 가격 데이터
-    Close_list = [fdr.DataReader(f"{x}",D_day_1_ago,D_day_1_ago)["Close"] for x in stock_list["종목코드"]]
-    raw_df=pd.DataFrame(Close_list)
-    Close_df=pd.DataFrame(raw_df.values, columns=[f"{D_day_1_ago}_종가"])
-    raw_step_data = pd.concat([stock_list,Close_df],axis=1)                      #조건0. OUTPUT = raw_step_data
-    print("raw 조건 종목 개수 :",len(raw_step_data))
-    
-    
-    ##조건1. OUTPUT = first_step_data, 동전주 1200이상 적용
-    first_step_data=raw_step_data[raw_step_data[f"{D_day_1_ago}_종가"] >= 1200]  #조건1. OUTPUT = first_step_data
-    print("첫번째 조건 종목 개수 :",len(first_step_data),"_동전주 1200이상 적용")
+    if dayOfTheWeek == "월요일":
+        Close_list = [fdr.DataReader(f"{x}",D_day_3_ago,D_day_3_ago)["Close"] for x in stock_list["종목코드"]]
+        raw_df=pd.DataFrame(Close_list)
+        Close_df=pd.DataFrame(raw_df.values, columns=[f"{D_day_3_ago}_종가"])
+        raw_step_data = pd.concat([stock_list,Close_df],axis=1)
+        print("raw 조건 종목 개수 :",len(raw_step_data))
+
+        ##조건1. OUTPUT = first_step_data, 동전주 1200이상 적용
+        first_step_data=raw_step_data[raw_step_data[f"{D_day_3_ago}_종가"] >= 1200]
+        print("첫번째 조건 종목 개수 :",len(first_step_data),"_동전주 1200이상 적용")
+
+
+    elif dayOfTheWeek == "일요일":
+        Close_list = [fdr.DataReader(f"{x}",D_day_2_ago,D_day_2_ago)["Close"] for x in stock_list["종목코드"]]
+        raw_df=pd.DataFrame(Close_list)
+        Close_df=pd.DataFrame(raw_df.values, columns=[f"{D_day_2_ago}_종가"])
+        raw_step_data = pd.concat([stock_list,Close_df],axis=1)
+        print("raw 조건 종목 개수 :",len(raw_step_data))
+
+        ##조건1. OUTPUT = first_step_data, 동전주 1200이상 적용
+        first_step_data=raw_step_data[raw_step_data[f"{D_day_2_ago}_종가"] >= 1200]
+        print("첫번째 조건 종목 개수 :",len(first_step_data),"_동전주 1200이상 적용")
+
+    else : 
+        Close_list = [fdr.DataReader(f"{x}",D_day_1_ago,D_day_1_ago)["Close"] for x in stock_list["종목코드"]]
+        raw_df=pd.DataFrame(Close_list)
+        Close_df=pd.DataFrame(raw_df.values, columns=[f"{D_day_1_ago}_종가"])
+        raw_step_data = pd.concat([stock_list,Close_df],axis=1)
+        print("raw 조건 종목 개수 :",len(raw_step_data))
+
+        ##조건1. OUTPUT = first_step_data, 동전주 1200이상 적용
+        first_step_data=raw_step_data[raw_step_data[f"{D_day_1_ago}_종가"] >= 1200]
+        print("첫번째 조건 종목 개수 :",len(first_step_data),"_동전주 1200이상 적용")
+       
     
     
     ##############################test용 설정 ####################################
