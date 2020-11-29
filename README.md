@@ -16,7 +16,7 @@
 - 해결법 1. 버전호환이 안되서 그럼 [https://grand-unified-engine.tistory.com/5](https://grand-unified-engine.tistory.com/5) 참고
 - 해결법 2. 관리자로 접근 안해서 그럼 [https://www.codingfactory.net/11743](https://www.codingfactory.net/11743)
 - 파이썬, 아나콘다 32비트로 다운 받아야지 실행된다고함 (난 처음부터 32비트로 다운 받은 상태였음..)
-
+- financedataReader 다운 -> pip install -U finance-datareader
 
 ## 2. 네이버 검색 : 코스닥 해당 종목이 뉴스 제목에 언급된 적이 있는지 판단하기
 
