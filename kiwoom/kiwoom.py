@@ -11,6 +11,10 @@ from PyQt5.QtTest import QTest
 
 from config.errorCode import *
 
+### 스케줄러 관련 ###
+import schedule
+##################
+
 ### telegram 관련 import ##
 import telegram
 
@@ -41,8 +45,8 @@ class Kiwoom(QAxWidget):
         #stock_list = stock_list['종목코드']
         ##############################################################################
 
-        yesterdaylast = '20201126153000'
-        yesterdayfirst = '20201126090100'
+        yesterdaylast = '20201130153000'
+        yesterdayfirst = '20201130090100'
 
         # 4,5,6 조건을 담을 새로운 리스트 생성
         new_stock_num_list = []
@@ -124,53 +128,49 @@ class Kiwoom(QAxWidget):
         ############################################
 
         ## 파이썬 스케줄러로 각각 9시 00분 / 9시01분에 돌려야함
-        ## 거래량 급증 데이터 할당 (9시 00분 조회)
-        self.tradeHigh_kiwoom_db() # 거래량급증요청
-        for stock in self.calcul_data:
-            if stock[0] in self.stock_info_list :
-                self.stock_info_list[stock[0]]['todayFirstPrice'] = stock[1]
-            else :
-                pass
-
-        ## 거래량 급증 데이터 할당 (9시 01분 조회)
-        self.tradeHigh_kiwoom_db() # 거래량급증요청
-        for stock in self.calcul_data:
-            if stock[0] in self.stock_info_list :
-                self.stock_info_list[stock[0]]['today0901Price'] = stock[1]
-                self.stock_info_list[stock[0]]['todayTradesVolume'] = stock[2]
-            else :
-                pass
+        self.flag1 = False
+        self.flag2 = False
+        schedule.every().days.at("23:40").do(self.job_0900)
+        schedule.every().days.at("23:41").do(self.job_0901)
+        while self.flag1 == False :
+            schedule.run_pending()
+            time.sleep(1)
+        while self.flag2 == False :
+            schedule.run_pending()
+            time.sleep(1)
 
         ## 조건식 계산
-        for item in self.stock_info_list.items():
-            if len(item[1]) > 4 :
-                todayTradesVolume = int(item[1]['todayTradesVolume'])
-                todayFirstPrice = int(item[1]['todayFirstPrice'][1:])
-                prevFirstTradesVolume = int(item[1]['prevFirstTradesVolume'])
-                prevLastPrice = int(item[1]['prevLastPrice'])
-                prevLastTradesVolume = int(item[1]['prevLastTradesVolume'])
-                today0901Price = int(item[1]['today0901Price'])
-                # 3) 전일 종가 대비 금일 시초가가 상승이 4% 미만
-                if todayFirstPrice > prevLastPrice:
-                    if ((todayFirstPrice - prevLastPrice) / prevLastPrice * 100) < 4:
-                        # 4) 금일 9시 00분 거래량이 전일 9시 00분 거래량보다 많다.
-                        if prevFirstTradesVolume < todayTradesVolume:
-                            # 5) 전일 15시 30분 거래량 보다 금일 9시 00분 거래량이 많다.
-                            if prevLastTradesVolume < todayTradesVolume :
-                                #6) 금일 9시 00분 종가(=9시 01분 현재가) 대비 전일 종가 상승 4% 미만
-                                if today0901Price > prevLastPrice:
-                                    if ((today0901Price - prevLastPrice) / prevLastPrice * 100) < 4:
+        if self.flag2 :
+            for item in self.stock_info_list.items():
+                if len(item[1]) > 6:
+                    todayTradesVolume = int(item[1]['todayTradesVolume'])
+                    todayFirstPrice = int(item[1]['today0900Price'][1:])
+                    today0900UpPercent = float(item[1]['today0900UpPercent'])
+                    prevFirstTradesVolume = int(item[1]['prevFirstTradesVolume'])
+                    prevLastPrice = int(item[1]['prevLastPrice'])
+                    prevLastTradesVolume = int(item[1]['prevLastTradesVolume'])
+                    #today0901Price = int(item[1]['today0901Price'])
+                    today0901UpPercent = float(item[1]['today0901UpPercent'])
+                    # 3) 전일 종가 대비 금일 시초가가 상승이 4% 미만
+                    if todayFirstPrice > prevLastPrice:
+                        if today0900UpPercent > 0.02 and today0900UpPercent < 4:
+                            # 4) 금일 9시 00분 거래량이 전일 9시 00분 거래량보다 많다.
+                            if prevFirstTradesVolume < todayTradesVolume:
+                                # 5) 전일 15시 30분 거래량 보다 금일 9시 00분 거래량이 많다.
+                                if prevLastTradesVolume < todayTradesVolume :
+                                    #6) 금일 9시 00분 종가(=9시 01분 현재가) 대비 전일 종가 상승 4% 미만
+                                    if today0901UpPercent > 0.02 and today0901UpPercent < 4:
                                         new_stock_num_list.append(item[0])
 
-        ## telegram 푸시 메세지 관련 코드
-        telgm_token = "1308465026:AAHOrMFyULrupxEnhkPIsNjGJ0o-4uF0q7U"
-        bot = telegram.Bot(telgm_token)
+            ## telegram 푸시 메세지 관련 코드
+            telgm_token = "1308465026:AAHOrMFyULrupxEnhkPIsNjGJ0o-4uF0q7U"
+            bot = telegram.Bot(telgm_token)
 
-        for stock in new_stock_num_list:
-            # 729845849 , -1001360628906
-            bot.sendMessage('729845849', stock)
-            # 보내고 3초동안 쉬기.. 1분에 20개의 메세지 밖에 보내지 못한다.
-            time.sleep(3);
+            for stock in new_stock_num_list:
+                # 729845849 , -1001360628906
+                bot.sendMessage('729845849', stock)
+                # 보내고 3초동안 쉬기.. 1분에 20개의 메세지 밖에 보내지 못한다.
+                time.sleep(3);
 
     def get_ocx_instance(self):
         self.setControl("KHOPENAPI.KHOpenAPICtrl.1") #레지스트리에 저장된 API 모듈 불러오기
@@ -377,7 +377,7 @@ class Kiwoom(QAxWidget):
                 info3 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "현재가")
                 #info4 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "전일대비기호")
                 #info5 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "전일대비")
-                #info6 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "등락률")
+                info6 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "등락률")
                 #info7 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "이전거래량")
                 #info8 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "현재거래량")
                 info9 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "급증량")
@@ -388,7 +388,7 @@ class Kiwoom(QAxWidget):
                 data.append(info3.strip())
                 #data.append(info4.strip())
                 #data.append(info5.strip())
-                #data.append(info6.strip())
+                data.append(info6.strip())
                 #data.append(info7.strip())
                 #data.append(info8.strip())
                 data.append(info9.strip())
@@ -455,10 +455,35 @@ class Kiwoom(QAxWidget):
         self.dynamicCall("SetInputValue(QString, QString)", "시장구분", "101")
         self.dynamicCall("SetInputValue(QString, QString)", "정렬구분", "1")
         self.dynamicCall("SetInputValue(QString, QString)", "시간구분", "1")
-        self.dynamicCall("SetInputValue(QString, QString)", "거래량구분", "0")
+        self.dynamicCall("SetInputValue(QString, QString)", "거래량구분", code)
         self.dynamicCall("SetInputValue(QString, QString)", "시간", "0")
         self.dynamicCall("SetInputValue(QString, QString)", "종목조건", "0")
         self.dynamicCall("SetInputValue(QString, QString)", "가격구분", "0")
         self.dynamicCall("CommRqData(QString, QString, int, QString)","거래량급증요청", "OPT10023", sPrevNext, self.screen_my_info)
 
         self.tradeHigh_kiwoom_db_event_loop.exec_()
+
+    def job_0900(self):
+        ## 거래량 급증 데이터 할당 (9시 00분 조회)
+        self.tradeHigh_kiwoom_db("0")  # 거래량급증요청
+        for stock in self.calcul_data:
+            if stock[0] in self.stock_info_list:
+                self.stock_info_list[stock[0]]['today0900Price'] = stock[1]
+                self.stock_info_list[stock[0]]['today0900UpPercent'] = stock[2]
+            else:
+                pass
+        self.flag1 = True
+
+
+    def job_0901(self):
+        ## 거래량 급증 데이터 할당 (9시 01분 조회)
+        self.tradeHigh_kiwoom_db("1")  # 거래량급증요청
+        for stock in self.calcul_data:
+            if stock[0] in self.stock_info_list:
+                self.stock_info_list[stock[0]]['today0901Price'] = stock[1]
+                self.stock_info_list[stock[0]]['today0901UpPercent'] = stock[1]
+                self.stock_info_list[stock[0]]['todayTradesVolume'] = stock[3]
+            else:
+                pass
+        self.flag2 = True
+

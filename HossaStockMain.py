@@ -24,8 +24,6 @@ import os
 import random
 import time
 
-TR_REQ_TIME_INTERVAL = 0.2
-
 ### 키움 api 관련 메서드 ###
 class Kiwoom(QAxWidget):
     def __init__(self):
