@@ -37,11 +37,9 @@ class Kiwoom(QAxWidget):
         stock_list = pd.DataFrame(stock_df, columns=["종목코드"])
 
         ##############################test용 설정 ####################################
-        stock_list = stock_list[:10]['종목코드']
+        stock_list = stock_list[:100]['종목코드']
         #stock_list = stock_list['종목코드']
         ##############################################################################
-
-        today2 = '20201127090000'  # 1분으로 설정하면 첫번째 가격을 알 수 있음
 
         yesterdaylast = '20201126153000'
         yesterdayfirst = '20201126090100'
@@ -52,17 +50,14 @@ class Kiwoom(QAxWidget):
         info_list = {}
 
         ## * 참고 : [0] : 체결시각 [1] : 체결가 [2] : 전일비 [3] : 매도 [4] : 매수 [5] : 거래량 [6] : 변동량
-        # 9시 되기전에 준비되어야 할 데이터 목록 정의
         # 9시 되기 되기 전에 가져와야 할 것
-        # 전일 종가, 전일 15시 30분 변동량, 전일 9시00분 변동량,
+        # 전날 15시 30분 00초 가격, 전날 15시 30분 00초 거래량, 전날 09시 01분 00초 거래량
         for stock in stock_list:
-            # 전일 마지막 거래 상세 가져오기
             yesterdaylasturl = f"https://finance.naver.com/item/sise_time.nhn?code={stock}&thistime={yesterdaylast}"
             raw = requests.get(yesterdaylasturl, headers={'User-Agent': 'Mozilla/5.0'})
             yesterdaylasthtml = BeautifulSoup(raw.text, "html.parser")
             yesterdaylastPrices = yesterdaylasthtml.select('body > table.type2 > tr:nth-child(3) > td > span')
 
-            # 전일 첫번째 거래 상세 가져오기
             yesterdayfirsturl = f"https://finance.naver.com/item/sise_time.nhn?code={stock}&thistime={yesterdayfirst}"
             raw = requests.get(yesterdayfirsturl, headers={'User-Agent': 'Mozilla/5.0'})
             yesterdayfirsthtml = BeautifulSoup(raw.text, "html.parser")
@@ -72,11 +67,12 @@ class Kiwoom(QAxWidget):
             if len(yesterdaylastPrices) > 5:
                 prevLastTradesVolume = int(yesterdaylastPrices[6].text.replace(',', ''))
                 prevLastPrice = int(yesterdaylastPrices[1].text.replace(',', ''))
-                stock_info['prevLastTradesVolume'] = prevLastTradesVolume
-                stock_info['prevLastPrice'] = prevLastPrice
+                stock_info['prevLastTradesVolume'] = prevLastTradesVolume # 전날 15시 30분 00초 거래량
+                stock_info['prevLastPrice'] = prevLastPrice # 전날 15시 30분 00초 가격
 
             if len(yesterdayfirstPrices) > 5:
                 prevFirstTradesVolume = int(yesterdayfirstPrices[6].text.replace(',', ''))
+                # 전날 09시 01분 00초 거래량
                 stock_info['prevFirstTradesVolume'] = prevFirstTradesVolume
 
             self.stock_info_list.update({stock: stock_info})
@@ -125,14 +121,23 @@ class Kiwoom(QAxWidget):
         #self.detail_account_info() # 예수금 요청 시그널 포함
         #self.detail_account_mystock() # 계좌평가잔고내역 가져오기
         #self.calculator_fnc()
-        self.tradeHigh_kiwoom_db() # 거래량급증요청
         ############################################
 
-        ## 거래량 급증 데이터 할당
+        ## 파이썬 스케줄러로 각각 9시 00분 / 9시01분에 돌려야함
+        ## 거래량 급증 데이터 할당 (9시 00분 조회)
+        self.tradeHigh_kiwoom_db() # 거래량급증요청
         for stock in self.calcul_data:
             if stock[0] in self.stock_info_list :
-                self.stock_info_list[stock[0]]['todayTradesVolume'] = stock[2]
                 self.stock_info_list[stock[0]]['todayFirstPrice'] = stock[1]
+            else :
+                pass
+
+        ## 거래량 급증 데이터 할당 (9시 01분 조회)
+        self.tradeHigh_kiwoom_db() # 거래량급증요청
+        for stock in self.calcul_data:
+            if stock[0] in self.stock_info_list :
+                self.stock_info_list[stock[0]]['today0901Price'] = stock[1]
+                self.stock_info_list[stock[0]]['todayTradesVolume'] = stock[2]
             else :
                 pass
 
@@ -143,17 +148,19 @@ class Kiwoom(QAxWidget):
                 todayFirstPrice = int(item[1]['todayFirstPrice'][1:])
                 prevFirstTradesVolume = int(item[1]['prevFirstTradesVolume'])
                 prevLastPrice = int(item[1]['prevLastPrice'])
-                # 4. 전일 9시00분 거래량 < 금일 9시 00분 거래량
-                if prevFirstTradesVolume < todayTradesVolume:
-                    # 7. 전일 15시 30분 거래량 < 금일 9시 00분 거래량
-                    # if prevLastTradesVolume < todayTradesVolume:
-                    # 5. 금일 시가(9시00분) 상승률이 전일종가대비 4% 미만
-                    # 5.1 위 로직을 계산하려면 하나의 조건 문이 더 추가 되어야함
-                    if todayFirstPrice > prevLastPrice:
-                        if ((todayFirstPrice - prevLastPrice) / prevLastPrice * 100) < 4:
-                            new_stock_num_list.append(item[0])
-
-        #print(new_stock_num_list)
+                prevLastTradesVolume = int(item[1]['prevLastTradesVolume'])
+                today0901Price = int(item[1]['today0901Price'])
+                # 3) 전일 종가 대비 금일 시초가가 상승이 4% 미만
+                if todayFirstPrice > prevLastPrice:
+                    if ((todayFirstPrice - prevLastPrice) / prevLastPrice * 100) < 4:
+                        # 4) 금일 9시 00분 거래량이 전일 9시 00분 거래량보다 많다.
+                        if prevFirstTradesVolume < todayTradesVolume:
+                            # 5) 전일 15시 30분 거래량 보다 금일 9시 00분 거래량이 많다.
+                            if prevLastTradesVolume < todayTradesVolume :
+                                #6) 금일 9시 00분 종가(=9시 01분 현재가) 대비 전일 종가 상승 4% 미만
+                                if today0901Price > prevLastPrice:
+                                    if ((today0901Price - prevLastPrice) / prevLastPrice * 100) < 4:
+                                        new_stock_num_list.append(item[0])
 
         ## telegram 푸시 메세지 관련 코드
         telgm_token = "1308465026:AAHOrMFyULrupxEnhkPIsNjGJ0o-4uF0q7U"
@@ -164,22 +171,6 @@ class Kiwoom(QAxWidget):
             bot.sendMessage('729845849', stock)
             # 보내고 3초동안 쉬기.. 1분에 20개의 메세지 밖에 보내지 못한다.
             time.sleep(3);
-        ###############################
-
-        # 9시 01분부터 데이터 가져와야 할 부분
-        ## 스케쥴링을 통해 정확히 9시01분부터 돌리기 시작합니다...
-        for stock in stock_list:
-            # 오늘 거래 상세 가져오기
-            todayurl = f"https://finance.naver.com/item/sise_time.nhn?code={stock}&thistime={today2}"
-            raw = requests.get(todayurl, headers={'User-Agent': 'Mozilla/5.0'})
-            todayurlhtml = BeautifulSoup(raw.text, "html.parser")
-            todayPrices = todayurlhtml.select('body > table.type2 > tr:nth-child(3) > td > span')
-
-            if len(todayPrices) > 5:
-                todayTradesVolume = int(todayPrices[5].text.replace(',', ''))
-                todayFirstPrice = int(todayPrices[1].text.replace(',', ''))
-                self.stock_info_list[stock]['todayTradesVolume'] = todayTradesVolume
-                self.stock_info_list[stock]['todayFirstPrice'] = todayFirstPrice
 
     def get_ocx_instance(self):
         self.setControl("KHOPENAPI.KHOpenAPICtrl.1") #레지스트리에 저장된 API 모듈 불러오기
@@ -388,8 +379,8 @@ class Kiwoom(QAxWidget):
                 #info5 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "전일대비")
                 #info6 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "등락률")
                 #info7 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "이전거래량")
-                info8 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "현재거래량")
-                #info9 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "급증량")
+                #info8 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "현재거래량")
+                info9 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "급증량")
                 #info10 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "급증률")
 
                 data.append(info1.strip())
@@ -399,8 +390,8 @@ class Kiwoom(QAxWidget):
                 #data.append(info5.strip())
                 #data.append(info6.strip())
                 #data.append(info7.strip())
-                data.append(info8.strip())
-                #data.append(info9.strip())
+                #data.append(info8.strip())
+                data.append(info9.strip())
                 #data.append(info10.strip())
 
                 self.calcul_data.append(data.copy())
