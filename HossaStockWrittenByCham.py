@@ -6,6 +6,7 @@ import os
 import random
 import time
 import FinanceDataReader as fdr
+from dateutil.relativedelta import *
 
 #Today는 금일 날짜, dayOfTheWeek,D_day는 전일 요일,날짜
 def printDayOfTheWeek (today):
