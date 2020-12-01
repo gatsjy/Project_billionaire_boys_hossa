@@ -13,10 +13,15 @@ def printDayOfTheWeek (today):
     year = int(today[0:4])
     month = int(today[5:7])
     day =  int(today[-2:])
-    D_day_1_ago = f"{year}.{month}.{day-1}"
-    D_day_2_ago = f"{year}.{month}.{day-2}"
-    D_day_3_ago = f"{year}.{month}.{day-3}"
-    return dayOfTheWeek[date(year, month, day).weekday()],D_day_1_ago,D_day_3_ago,D_day_2_ago
+    return dayOfTheWeek[date(year, month, day).weekday()]
+
+#날짜 포맷 바꾸기(yyyy-mm-dd -> yyyy.mm.dd)
+def format_change(today):
+    year = str(today[0:4])
+    month = str(today[5:7])
+    day =  str(today[-2:])
+    return f"{year}.{month}.{day}"
+
 
 if __name__ == "__main__":
 
@@ -28,8 +33,11 @@ if __name__ == "__main__":
     stock_list = pd.DataFrame(stock_df, columns=["회사명", "종목코드"])
 
     ##날짜 갖고오기 (2020.11.19)
-    today = datetime.today().strftime("%Y.%m.%d")
-    dayOfTheWeek,D_day_1_ago,D_day_3_ago,D_day_2_ago = printDayOfTheWeek(today)
+    today = format_change(str(datetime.now().date()+relativedelta(days=-0)))
+    dayOfTheWeek = printDayOfTheWeek(today)
+    D_day_1_ago = format_change(str(datetime.now().date()+relativedelta(days=-1)))
+    D_day_2_ago = format_change(str(datetime.now().date()+relativedelta(days=-2)))
+    D_day_3_ago = format_change(str(datetime.now().date()+relativedelta(days=-3)))
     
     ##조건0. OUTPUT = raw_step_data, 코스닥 종목+종가 가격 데이터
     if dayOfTheWeek == "월요일":
