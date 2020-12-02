@@ -45,8 +45,8 @@ class Kiwoom(QAxWidget):
         #stock_list = stock_list['종목코드']
         ##############################################################################
 
-        yesterdaylast = '20201130153000'
-        yesterdayfirst = '20201130090100'
+        yesterdaylast = '20201201153000'
+        yesterdayfirst = '20201201090100'
 
         # 4,5,6 조건을 담을 새로운 리스트 생성
         new_stock_num_list = []
@@ -130,8 +130,8 @@ class Kiwoom(QAxWidget):
         ## 파이썬 스케줄러로 각각 9시 00분 / 9시01분에 돌려야함
         self.flag1 = False
         self.flag2 = False
-        schedule.every().days.at("23:40").do(self.job_0900)
-        schedule.every().days.at("23:41").do(self.job_0901)
+        schedule.every().days.at("09:00").do(self.job_0900)
+        schedule.every().days.at("09:01").do(self.job_0901)
         while self.flag1 == False :
             schedule.run_pending()
             time.sleep(1)
@@ -168,9 +168,11 @@ class Kiwoom(QAxWidget):
 
             for stock in new_stock_num_list:
                 # 729845849 , -1001360628906
-                bot.sendMessage('729845849', stock)
+                bot.sendMessage('-1001360628906', stock)
                 # 보내고 3초동안 쉬기.. 1분에 20개의 메세지 밖에 보내지 못한다.
                 time.sleep(3);
+
+            print("-----end----") # 중단점 찍기위해서 넣어준 코드
 
     def get_ocx_instance(self):
         self.setControl("KHOPENAPI.KHOpenAPICtrl.1") #레지스트리에 저장된 API 모듈 불러오기
