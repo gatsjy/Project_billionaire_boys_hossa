@@ -39,14 +39,17 @@ class Kiwoom(QAxWidget):
         stock_df['종목코드'] = stock_df['종목코드'].apply(lambda x: "{:0>6d}".format(x))  # 종목코드 string변환
         # 2. 전 종목 뉴스 크롤링 중 언급 된 적 없는 리스트 추출
         stock_list = pd.DataFrame(stock_df, columns=["종목코드"])
+        ## 임시 변수 할당
+        self.code = "0";
 
         ##############################test용 설정 ####################################
-        stock_list = stock_list[:100]['종목코드']
-        #stock_list = stock_list['종목코드']
+        #stock_list = stock_list[:100]['종목코드']
+        #stock_list = stock_list[:10]['종목코드']
+        stock_list = stock_list['종목코드']
         ##############################################################################
 
-        yesterdaylast = '20201201153000'
-        yesterdayfirst = '20201201090100'
+        yesterdaylast = '20201203153000'
+        yesterdayfirst = '20201203090100'
 
         # 4,5,6 조건을 담을 새로운 리스트 생성
         new_stock_num_list = []
@@ -142,14 +145,14 @@ class Kiwoom(QAxWidget):
         ## 조건식 계산
         if self.flag2 :
             for item in self.stock_info_list.items():
-                if len(item[1]) > 6:
+                if len(item[1]) > 7:
                     todayTradesVolume = int(item[1]['todayTradesVolume'])
                     todayFirstPrice = int(item[1]['today0900Price'][1:])
                     today0900UpPercent = float(item[1]['today0900UpPercent'])
                     prevFirstTradesVolume = int(item[1]['prevFirstTradesVolume'])
                     prevLastPrice = int(item[1]['prevLastPrice'])
                     prevLastTradesVolume = int(item[1]['prevLastTradesVolume'])
-                    #today0901Price = int(item[1]['today0901Price'])
+                    today0901Price = int(item[1]['today0901Price'][1:])
                     today0901UpPercent = float(item[1]['today0901UpPercent'])
                     # 3) 전일 종가 대비 금일 시초가가 상승이 4% 미만
                     if todayFirstPrice > prevLastPrice:
@@ -401,7 +404,7 @@ class Kiwoom(QAxWidget):
             print("sPreNext : %s" % sPrevNext)
 
             if sPrevNext == "2":
-                self.tradeHigh_kiwoom_db(sPrevNext="2")
+                self.tradeHigh_kiwoom_db(self.code, sPrevNext="2")
             else:
                 self.tradeHigh_kiwoom_db_event_loop.exit()
 
@@ -451,14 +454,14 @@ class Kiwoom(QAxWidget):
 
         self.calculator_event_loop.exec_()
 
-    def tradeHigh_kiwoom_db(self, code=None, date=None, sPrevNext="1"):
+    def tradeHigh_kiwoom_db(self, code, date=None, sPrevNext="1"):
         QTest.qWait(3600) #3.6초마다 딜레이를 준다.
 
         self.dynamicCall("SetInputValue(QString, QString)", "시장구분", "101")
         self.dynamicCall("SetInputValue(QString, QString)", "정렬구분", "1")
         self.dynamicCall("SetInputValue(QString, QString)", "시간구분", "1")
-        self.dynamicCall("SetInputValue(QString, QString)", "거래량구분", code)
-        self.dynamicCall("SetInputValue(QString, QString)", "시간", "0")
+        self.dynamicCall("SetInputValue(QString, QString)", "거래량구분", "0")
+        self.dynamicCall("SetInputValue(QString, QString)", "시간", self.code)
         self.dynamicCall("SetInputValue(QString, QString)", "종목조건", "0")
         self.dynamicCall("SetInputValue(QString, QString)", "가격구분", "0")
         self.dynamicCall("CommRqData(QString, QString, int, QString)","거래량급증요청", "OPT10023", sPrevNext, self.screen_my_info)
@@ -467,7 +470,8 @@ class Kiwoom(QAxWidget):
 
     def job_0900(self):
         ## 거래량 급증 데이터 할당 (9시 00분 조회)
-        self.tradeHigh_kiwoom_db("0")  # 거래량급증요청
+        self.code = "0";
+        self.tradeHigh_kiwoom_db(code="0")  # 거래량급증요청
         for stock in self.calcul_data:
             if stock[0] in self.stock_info_list:
                 self.stock_info_list[stock[0]]['today0900Price'] = stock[1]
@@ -475,17 +479,20 @@ class Kiwoom(QAxWidget):
             else:
                 pass
         self.flag1 = True
+        self.calcul_data.clear();
 
 
     def job_0901(self):
         ## 거래량 급증 데이터 할당 (9시 01분 조회)
-        self.tradeHigh_kiwoom_db("1")  # 거래량급증요청
+        self.code ="1"
+        self.tradeHigh_kiwoom_db(code="1")  # 거래량급증요청
         for stock in self.calcul_data:
             if stock[0] in self.stock_info_list:
                 self.stock_info_list[stock[0]]['today0901Price'] = stock[1]
-                self.stock_info_list[stock[0]]['today0901UpPercent'] = stock[1]
+                self.stock_info_list[stock[0]]['today0901UpPercent'] = stock[2]
                 self.stock_info_list[stock[0]]['todayTradesVolume'] = stock[3]
             else:
                 pass
         self.flag2 = True
+        self.calcul_data.clear();
 
