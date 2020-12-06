@@ -29,7 +29,10 @@ import time
 class Kiwoom(QAxWidget):
     def __init__(self):
         super().__init__()
-        print("Kiwoom() class start.")
+        
+        print("***************************************************************************")
+        print("*********************** 키움 api 관련 시작 **********************************")
+        print("***************************************************************************")
 
         #############################################
         ## 키움 api 시작하기 전에 네이버 크롤링을 통해 원하는 데이터를 가져와서 비교하는 로직 입니다
@@ -39,17 +42,16 @@ class Kiwoom(QAxWidget):
         stock_df['종목코드'] = stock_df['종목코드'].apply(lambda x: "{:0>6d}".format(x))  # 종목코드 string변환
         # 2. 전 종목 뉴스 크롤링 중 언급 된 적 없는 리스트 추출
         stock_list = pd.DataFrame(stock_df, columns=["종목코드"])
-        ## 임시 변수 할당
-        self.code = "0";
 
         ##############################test용 설정 ####################################
-        #stock_list = stock_list[:100]['종목코드']
         #stock_list = stock_list[:10]['종목코드']
-        stock_list = stock_list['종목코드']
+        stock_list = stock_list[:100]['종목코드']
+        #stock_list = stock_list['종목코드']
         ##############################################################################
 
         yesterdaylast = '20201203153000'
-        yesterdayfirst = '20201203090100'
+        #yesterdayfirst = '20201203090100'
+        yesterdayfirst = '20201203100000' ## 수능날이여서 늦게 오픈
 
         # 4,5,6 조건을 담을 새로운 리스트 생성
         new_stock_num_list = []
@@ -91,8 +93,8 @@ class Kiwoom(QAxWidget):
         # self.detail_account_info_event_loop = None # 예수금 요청용 이벤트 루프
         # self.calculator_event_loop = QEventLoop()
         # self.request_stock_price = None # 업종별주가요청
-
-        self.tradeHigh_kiwoom_db_event_loop = QEventLoop()  # 거래량 급증 이벤트 루프
+        self.tradeHigh_kiwoom_db_event_loop1 = None
+        self.tradeHigh_kiwoom_db_event_loop2 = None
         #########################################
 
         ### 계좌 관련된 변수 ###
@@ -108,7 +110,6 @@ class Kiwoom(QAxWidget):
 
         #### 종목 분석 용
         ### 거래량 급증
-        ### 0 : 종목코드 / 1 : 종목명 / 2 : 현재가 / 3 : 전일대비기호 / 4 : 전일대비 / 5 : 등락률 / 6 : 이전거래량 / 7 : 현재거래량 / 8 : 급증량
         self.calcul_data = []
         #####################
         #### 거래량 급증 종목 분석 용
@@ -133,12 +134,12 @@ class Kiwoom(QAxWidget):
         ## 파이썬 스케줄러로 각각 9시 00분 / 9시01분에 돌려야함
         self.flag1 = False
         self.flag2 = False
-        schedule.every().days.at("09:00").do(self.job_0900)
-        schedule.every().days.at("09:01").do(self.job_0901)
-        while self.flag1 == False :
+        schedule.every().days.at("14:10:10").do(self.job_0900)
+        schedule.every().days.at("14:11:15").do(self.job_0901)
+        while self.flag1 == False:
             schedule.run_pending()
             time.sleep(1)
-        while self.flag2 == False :
+        while self.flag2 == False:
             schedule.run_pending()
             time.sleep(1)
 
@@ -170,8 +171,8 @@ class Kiwoom(QAxWidget):
             bot = telegram.Bot(telgm_token)
 
             for stock in new_stock_num_list:
-                # 729845849 , -1001360628906
-                bot.sendMessage('-1001360628906', stock)
+                # 729845849(나한테 보내기) , -1001360628906(호싸 채팅방)
+                bot.sendMessage('729845849', stock)
                 # 보내고 3초동안 쉬기.. 1분에 20개의 메세지 밖에 보내지 못한다.
                 time.sleep(3);
 
@@ -236,7 +237,7 @@ class Kiwoom(QAxWidget):
             self.stop_screen_cancel(self.screen_my_info)
 
             rows = self.dynamicCall("GetRepeatCnt(QString, QString)", sTrCode, sRQName)
-            
+
             for i in range(rows):
                 code = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "종목번호")
                 code = code.strip()[1:]
@@ -315,63 +316,12 @@ class Kiwoom(QAxWidget):
                 print("총 일수 %s" % len(self.calcul_data))
 
                 pass_success = False
-                
+
                 # 120일 이평선을 그릴만큼의 데이터가 있는지 체크
                 if self.calcul_data == None or len(self.calcul_data) < 120:
                     pass_success = False;
-                else:
-                    # 120일 이평선의 최근 가격 구함
-                    total_price = 0
-                    for value in self.calcul_data[:120]:
-                        total_price += int(value[1])
-                    moving_average_price = total_price/120
 
-                    # 오늘자 주가가 120일 이평선에 걸쳐있는지 확인
-                    bottom_stock_price = False
-                    check_price = None
-                    if int(self.calcul_data[0][7]) <= moving_average_price and moving_average_price <= int(self.calcul_data[0][6]):
-                        print("오늘의 주가가 120 이평선에 걸쳐있는지 확인")
-                        bottom_stock_price = True
-                        check_price = int(self.calcul_data[0][6])
-
-                    # 과거 일봉 데이터를 조회하면서 120일 이동평균선보다 주가각 계속 밑에 존재하는지 확인
-                    prev_price = None
-                    if bottom_stock_price == True:
-                        moving_average_price_prev = 0
-                        prive_top_moving = False
-                        idx = 1
-
-                        while True:
-                            if len(self.calcul_data[idx:]) < 120: # 120일 치가 있는지 계속 확인
-                                print("120일 치가 없음")
-                                break
-
-                            total_price = 0
-                            for value in self.calcul_data[idx:120+idx]:
-                                total_price += int(value[1])
-                            moving_average_price_prev = total_price / 120
-
-                            if moving_average_price_prev <= int(self.calcul_data[idx][6]) and idx <= 20:
-                                print("20일 주가가 120일 이평선과 같거나 위에 있으면 조건 통과 못 함")
-                                price_top_moving = False
-                                break
-
-                            elif int(self.calcul_data[idx][7]) > moving_average_price_prev and idx > 20 : # 120일 이평선 위에 있는 구간 존재
-                                print("120일치 이평선 위에 있는 구간 확인됨")
-                                price_top_moving = True
-                                prev_price = int(self.calcul_data[idx][7])
-                                break
-
-                            idx += 1
-                            
-                        # 해당부분 이평선이 가장 최근의 이평선 가격보다 낮은지 확인
-                        if price_top_moving == True:
-                            if moving_average_price > moving_average_price_prev and check_price > prev_price:
-                                print("포착된 이평선의 가격이 오늘자 이평선 가격보다 낮은 것 확인")
-                                print("포착된 부분의 일봉 저가가 오늘자 일봉의 고가보다 낮은지 확인")
-                                pass_success = True
-
-        elif sRQName == "거래량급증요청":
+        elif sRQName == "거래량급증요청" and self.flag1 is False:
             cnt = self.dynamicCall("GetRepeatCnt(QString, QString)", sTrCode, sRQName)
 
             for i in range(cnt):
@@ -400,14 +350,52 @@ class Kiwoom(QAxWidget):
                 #data.append(info10.strip())
 
                 self.calcul_data.append(data.copy())
+                print(data)
 
             print("sPreNext : %s" % sPrevNext)
 
             if sPrevNext == "2":
-                self.tradeHigh_kiwoom_db(self.code, sPrevNext="2")
+                self.tradeHigh_kiwoom_db1(sPrevNext=sPrevNext)
             else:
-                self.tradeHigh_kiwoom_db_event_loop.exit()
+                self.tradeHigh_kiwoom_db_event_loop1.exit()
 
+        elif sRQName == "거래량급증요청" and self.flag1 is True:
+            cnt = self.dynamicCall("GetRepeatCnt(QString, QString)", sTrCode, sRQName)
+
+            for i in range(cnt):
+                data = []
+
+                info1 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "종목코드")
+                #info2 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "종목명")
+                info3 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "현재가")
+                #info4 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "전일대비기호")
+                #info5 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "전일대비")
+                info6 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "등락률")
+                #info7 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "이전거래량")
+                #info8 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "현재거래량")
+                info9 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "급증량")
+                #info10 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "급증률")
+
+                data.append(info1.strip())
+                #data.append(info2.strip())
+                data.append(info3.strip())
+                #data.append(info4.strip())
+                #data.append(info5.strip())
+                data.append(info6.strip())
+                #data.append(info7.strip())
+                #data.append(info8.strip())
+                data.append(info9.strip())
+                #data.append(info10.strip())
+
+                self.calcul_data.append(data.copy())
+                print(data)
+
+            print("sPreNext : %s" % sPrevNext)
+
+            if sPrevNext == "2":
+                self.tradeHigh_kiwoom_db2(sPrevNext=sPrevNext)
+            else:
+                self.tradeHigh_kiwoom_db_event_loop2.exit()
 
     def stop_screen_cancel(self, sScrNo = None):
         self.dynamicCall("DisconnectRealData(QString)", sScrNo) # 스크린 번호 연결 끊기
@@ -454,24 +442,50 @@ class Kiwoom(QAxWidget):
 
         self.calculator_event_loop.exec_()
 
-    def tradeHigh_kiwoom_db(self, code, date=None, sPrevNext="1"):
+    def tradeHigh_kiwoom_db1(self, code=None, date=None, sPrevNext=None):
         QTest.qWait(3600) #3.6초마다 딜레이를 준다.
 
         self.dynamicCall("SetInputValue(QString, QString)", "시장구분", "101")
         self.dynamicCall("SetInputValue(QString, QString)", "정렬구분", "1")
         self.dynamicCall("SetInputValue(QString, QString)", "시간구분", "1")
-        self.dynamicCall("SetInputValue(QString, QString)", "거래량구분", "0")
-        self.dynamicCall("SetInputValue(QString, QString)", "시간", self.code)
+        #self.dynamicCall("SetInputValue(QString, QString)", "거래량구분", "0")
+        #self.dynamicCall("SetInputValue(QString, QString)", "시간", "0")
+        self.dynamicCall("SetInputValue(QString, QString)", "거래량구분", "5")
+        self.dynamicCall("SetInputValue(QString, QString)", "시간", "1")
         self.dynamicCall("SetInputValue(QString, QString)", "종목조건", "0")
         self.dynamicCall("SetInputValue(QString, QString)", "가격구분", "0")
         self.dynamicCall("CommRqData(QString, QString, int, QString)","거래량급증요청", "OPT10023", sPrevNext, self.screen_my_info)
 
-        self.tradeHigh_kiwoom_db_event_loop.exec_()
+        # 다음 코드가 진행되지 않도록 이벤트 루프를 실행해서 다음 코드가 실행되지 않게 막는다.
+        self.tradeHigh_kiwoom_db_event_loop1.exec_()
+
+    def tradeHigh_kiwoom_db2(self, code=None, date=None, sPrevNext=None):
+        QTest.qWait(3600) #3.6초마다 딜레이를 준다.
+
+        self.dynamicCall("SetInputValue(QString, QString)", "시장구분", "101")
+        self.dynamicCall("SetInputValue(QString, QString)", "정렬구분", "1")
+        self.dynamicCall("SetInputValue(QString, QString)", "시간구분", "1")
+        #self.dynamicCall("SetInputValue(QString, QString)", "거래량구분", "0")
+        #self.dynamicCall("SetInputValue(QString, QString)", "시간", "0")
+        self.dynamicCall("SetInputValue(QString, QString)", "거래량구분", "5")
+        self.dynamicCall("SetInputValue(QString, QString)", "시간", "1")
+        self.dynamicCall("SetInputValue(QString, QString)", "종목조건", "0")
+        self.dynamicCall("SetInputValue(QString, QString)", "가격구분", "0")
+        self.dynamicCall("CommRqData(QString, QString, int, QString)","거래량급증요청", "OPT10023", sPrevNext, self.screen_my_info)
+
+        # 다음 코드가 진행되지 않도록 이벤트 루프를 실행해서 다음 코드가 실행되지 않게 막는다.
+        self.tradeHigh_kiwoom_db_event_loop2.exec_()
 
     def job_0900(self):
         ## 거래량 급증 데이터 할당 (9시 00분 조회)
-        self.code = "0";
-        self.tradeHigh_kiwoom_db(code="0")  # 거래량급증요청
+        print("##########################################")
+        print("##########################################")
+        print("***************job_0900 시작**************")
+        print("##########################################")
+        print("##########################################")
+        self.tradeHigh_kiwoom_db_event_loop1 = QEventLoop()
+        self.tradeHigh_kiwoom_db1(sPrevNext="0")  # 거래량급증요청
+
         for stock in self.calcul_data:
             if stock[0] in self.stock_info_list:
                 self.stock_info_list[stock[0]]['today0900Price'] = stock[1]
@@ -484,8 +498,14 @@ class Kiwoom(QAxWidget):
 
     def job_0901(self):
         ## 거래량 급증 데이터 할당 (9시 01분 조회)
-        self.code ="1"
-        self.tradeHigh_kiwoom_db(code="1")  # 거래량급증요청
+        print("##########################################")
+        print("##########################################")
+        print("***************job_0901 시작**************")
+        print("##########################################")
+        print("##########################################")
+        self.tradeHigh_kiwoom_db_event_loop2 = QEventLoop()
+        self.tradeHigh_kiwoom_db2(sPrevNext="0")  # 거래량급증요청
+
         for stock in self.calcul_data:
             if stock[0] in self.stock_info_list:
                 self.stock_info_list[stock[0]]['today0901Price'] = stock[1]

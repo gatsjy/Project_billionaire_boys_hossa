@@ -125,6 +125,7 @@ class Kiwoom(QAxWidget):
 
 if __name__ == "__main__":
 
+
     ###키움 api 접속하는 부분 입니다
     app = QApplication(sys.argv)
     kiwoom = Kiwoom()
