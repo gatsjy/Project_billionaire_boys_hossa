@@ -10,7 +10,7 @@ from PyQt5.QtCore import *
 from PyQt5.QtTest import QTest
 
 from config.errorCode import *
-
+import pandas as pd
 ### 스케줄러 관련 ###
 import schedule
 ##################
@@ -18,76 +18,36 @@ import schedule
 ### telegram 관련 import ##
 import telegram
 
-import requests
-from bs4 import BeautifulSoup
-from datetime import datetime
-import pandas as pd
-import os
-import random
 import time
 
 class Kiwoom(QAxWidget):
-    def __init__(self):
+    def __init__(self, news_crawling_result_data):
         super().__init__()
         
         print("***************************************************************************")
         print("*********************** 키움 api 관련 시작 **********************************")
         print("***************************************************************************")
 
-        #############################################
-        ## 키움 api 시작하기 전에 네이버 크롤링을 통해 원하는 데이터를 가져와서 비교하는 로직 입니다
-        #############################################
-        # 1. 1400개의 코스닥 종목
-        stock_df = pd.read_excel("./resource/코스닥.xlsx")
-        stock_df['종목코드'] = stock_df['종목코드'].apply(lambda x: "{:0>6d}".format(x))  # 종목코드 string변환
-        # 2. 전 종목 뉴스 크롤링 중 언급 된 적 없는 리스트 추출
-        stock_list = pd.DataFrame(stock_df, columns=["종목코드"])
-
-        ##############################test용 설정 ####################################
-        #stock_list = stock_list[:10]['종목코드']
-        stock_list = stock_list[:100]['종목코드']
-        #stock_list = stock_list['종목코드']
-        ##############################################################################
-
-        yesterdaylast = '20201203153000'
-        #yesterdayfirst = '20201203090100'
-        yesterdayfirst = '20201203100000' ## 수능날이여서 늦게 오픈
-
-        # 4,5,6 조건을 담을 새로운 리스트 생성
-        new_stock_num_list = []
+        # 전역 변수 세팅
+        self.selected_stock_list = []
         self.stock_info_list = {}
-        info_list = {}
 
-        ## * 참고 : [0] : 체결시각 [1] : 체결가 [2] : 전일비 [3] : 매도 [4] : 매수 [5] : 거래량 [6] : 변동량
-        # 9시 되기 되기 전에 가져와야 할 것
-        # 전날 15시 30분 00초 가격, 전날 15시 30분 00초 거래량, 전날 09시 01분 00초 거래량
-        for stock in stock_list:
-            yesterdaylasturl = f"https://finance.naver.com/item/sise_time.nhn?code={stock}&thistime={yesterdaylast}"
-            raw = requests.get(yesterdaylasturl, headers={'User-Agent': 'Mozilla/5.0'})
-            yesterdaylasthtml = BeautifulSoup(raw.text, "html.parser")
-            yesterdaylastPrices = yesterdaylasthtml.select('body > table.type2 > tr:nth-child(3) > td > span')
-
-            yesterdayfirsturl = f"https://finance.naver.com/item/sise_time.nhn?code={stock}&thistime={yesterdayfirst}"
-            raw = requests.get(yesterdayfirsturl, headers={'User-Agent': 'Mozilla/5.0'})
-            yesterdayfirsthtml = BeautifulSoup(raw.text, "html.parser")
-            yesterdayfirstPrices = yesterdayfirsthtml.select('body > table.type2 > tr:nth-child(3) > td > span')
-
+        # 뉴스크롤링에서 가져온 데이터를 할당 합니다.
+        df = pd.DataFrame(news_crawling_result_data)
+        for stock in df.values:
+            # [0] : 회사명
+            # [1] : 종목ID
+            # [2] : 전일종가 prevLastPrice
+            # [3] : 전일 첫 거래량 prevFirstTradesVolume
+            # [4] : 전일 마지막 거래량 prevLastTradesVolume
+            # print(stock)
             stock_info = {}
-            if len(yesterdaylastPrices) > 5:
-                prevLastTradesVolume = int(yesterdaylastPrices[6].text.replace(',', ''))
-                prevLastPrice = int(yesterdaylastPrices[1].text.replace(',', ''))
-                stock_info['prevLastTradesVolume'] = prevLastTradesVolume # 전날 15시 30분 00초 거래량
-                stock_info['prevLastPrice'] = prevLastPrice # 전날 15시 30분 00초 가격
+            stock_info['stockName'] = stock[0]
+            stock_info['prevLastPrice'] = stock[2]
+            stock_info['prevFirstTradesVolume'] = stock[3]
+            stock_info['prevLastTradesVolume'] = stock[4]
+            self.stock_info_list.update({stock[1]: stock_info})
 
-            if len(yesterdayfirstPrices) > 5:
-                prevFirstTradesVolume = int(yesterdayfirstPrices[6].text.replace(',', ''))
-                # 전날 09시 01분 00초 거래량
-                stock_info['prevFirstTradesVolume'] = prevFirstTradesVolume
-
-            self.stock_info_list.update({stock: stock_info})
-
-        # 9시에 돌려서 해당 현재일자의 거래량, 초기가격을 가져옵니다.
-        ######### 키움관련 api 시작 ###############
         ######### event loop를 실행하기 위한 변수 모음
         self.login_event_loop = QEventLoop()  # 로그인 요청용 이벤트루프
         # self.detail_account_info_event_loop = None # 예수금 요청용 이벤트 루프
@@ -134,8 +94,8 @@ class Kiwoom(QAxWidget):
         ## 파이썬 스케줄러로 각각 9시 00분 / 9시01분에 돌려야함
         self.flag1 = False
         self.flag2 = False
-        schedule.every().days.at("14:10:10").do(self.job_0900)
-        schedule.every().days.at("14:11:15").do(self.job_0901)
+        schedule.every().days.at("09:00:10").do(self.job_0900)
+        schedule.every().days.at("09:01:15").do(self.job_0901)
         while self.flag1 == False:
             schedule.run_pending()
             time.sleep(1)
@@ -146,31 +106,33 @@ class Kiwoom(QAxWidget):
         ## 조건식 계산
         if self.flag2 :
             for item in self.stock_info_list.items():
-                if len(item[1]) > 7:
-                    todayTradesVolume = int(item[1]['todayTradesVolume'])
-                    todayFirstPrice = int(item[1]['today0900Price'][1:])
-                    today0900UpPercent = float(item[1]['today0900UpPercent'])
+                if len(item[1]) > 8:
                     prevFirstTradesVolume = int(item[1]['prevFirstTradesVolume'])
                     prevLastPrice = int(item[1]['prevLastPrice'])
                     prevLastTradesVolume = int(item[1]['prevLastTradesVolume'])
+
+                    todayTradesVolume = int(item[1]['todayTradesVolume'])
+                    today0900Price = int(item[1]['today0900Price'][1:])
+                    today0900UpPercent = float(item[1]['today0900UpPercent'])
+
                     today0901Price = int(item[1]['today0901Price'][1:])
                     today0901UpPercent = float(item[1]['today0901UpPercent'])
                     # 3) 전일 종가 대비 금일 시초가가 상승이 4% 미만
-                    if todayFirstPrice > prevLastPrice:
-                        if today0900UpPercent > 0.02 and today0900UpPercent < 4:
-                            # 4) 금일 9시 00분 거래량이 전일 9시 00분 거래량보다 많다.
-                            if prevFirstTradesVolume < todayTradesVolume:
-                                # 5) 전일 15시 30분 거래량 보다 금일 9시 00분 거래량이 많다.
-                                if prevLastTradesVolume < todayTradesVolume :
-                                    #6) 금일 9시 00분 종가(=9시 01분 현재가) 대비 전일 종가 상승 4% 미만
-                                    if today0901UpPercent > 0.02 and today0901UpPercent < 4:
-                                        new_stock_num_list.append(item[0])
+                    #if today0900Price > prevLastPrice:
+                    if today0900UpPercent > 0.02 and today0900UpPercent < 4:
+                        # 4) 금일 9시 00분 거래량이 전일 9시 00분 거래량보다 많다.
+                        if prevFirstTradesVolume < todayTradesVolume:
+                            # 5) 전일 15시 30분 거래량 보다 금일 9시 00분 거래량이 많다.
+                            if prevLastTradesVolume < todayTradesVolume :
+                                #6) 금일 9시 00분 종가(=9시 01분 현재가) 대비 전일 종가 상승 4% 미만
+                                if today0901UpPercent > 0.02 and today0901UpPercent < 4:
+                                    self.selected_stock_list.append(item[0])
 
             ## telegram 푸시 메세지 관련 코드
             telgm_token = "1308465026:AAHOrMFyULrupxEnhkPIsNjGJ0o-4uF0q7U"
             bot = telegram.Bot(telgm_token)
 
-            for stock in new_stock_num_list:
+            for stock in self.selected_stock_list:
                 # 729845849(나한테 보내기) , -1001360628906(호싸 채팅방)
                 bot.sendMessage('729845849', stock)
                 # 보내고 3초동안 쉬기.. 1분에 20개의 메세지 밖에 보내지 못한다.
@@ -442,16 +404,15 @@ class Kiwoom(QAxWidget):
 
         self.calculator_event_loop.exec_()
 
+    ## 09:00 실행되는 job
     def tradeHigh_kiwoom_db1(self, code=None, date=None, sPrevNext=None):
         QTest.qWait(3600) #3.6초마다 딜레이를 준다.
 
         self.dynamicCall("SetInputValue(QString, QString)", "시장구분", "101")
         self.dynamicCall("SetInputValue(QString, QString)", "정렬구분", "1")
         self.dynamicCall("SetInputValue(QString, QString)", "시간구분", "1")
-        #self.dynamicCall("SetInputValue(QString, QString)", "거래량구분", "0")
-        #self.dynamicCall("SetInputValue(QString, QString)", "시간", "0")
-        self.dynamicCall("SetInputValue(QString, QString)", "거래량구분", "5")
-        self.dynamicCall("SetInputValue(QString, QString)", "시간", "1")
+        self.dynamicCall("SetInputValue(QString, QString)", "거래량구분", "0")
+        self.dynamicCall("SetInputValue(QString, QString)", "시간", "0")
         self.dynamicCall("SetInputValue(QString, QString)", "종목조건", "0")
         self.dynamicCall("SetInputValue(QString, QString)", "가격구분", "0")
         self.dynamicCall("CommRqData(QString, QString, int, QString)","거래량급증요청", "OPT10023", sPrevNext, self.screen_my_info)
@@ -459,16 +420,15 @@ class Kiwoom(QAxWidget):
         # 다음 코드가 진행되지 않도록 이벤트 루프를 실행해서 다음 코드가 실행되지 않게 막는다.
         self.tradeHigh_kiwoom_db_event_loop1.exec_()
 
+    ## 09:01 실행되는 job
     def tradeHigh_kiwoom_db2(self, code=None, date=None, sPrevNext=None):
         QTest.qWait(3600) #3.6초마다 딜레이를 준다.
 
         self.dynamicCall("SetInputValue(QString, QString)", "시장구분", "101")
         self.dynamicCall("SetInputValue(QString, QString)", "정렬구분", "1")
         self.dynamicCall("SetInputValue(QString, QString)", "시간구분", "1")
-        #self.dynamicCall("SetInputValue(QString, QString)", "거래량구분", "0")
-        #self.dynamicCall("SetInputValue(QString, QString)", "시간", "0")
-        self.dynamicCall("SetInputValue(QString, QString)", "거래량구분", "5")
-        self.dynamicCall("SetInputValue(QString, QString)", "시간", "1")
+        self.dynamicCall("SetInputValue(QString, QString)", "거래량구분", "0")
+        self.dynamicCall("SetInputValue(QString, QString)", "시간", "0")
         self.dynamicCall("SetInputValue(QString, QString)", "종목조건", "0")
         self.dynamicCall("SetInputValue(QString, QString)", "가격구분", "0")
         self.dynamicCall("CommRqData(QString, QString, int, QString)","거래량급증요청", "OPT10023", sPrevNext, self.screen_my_info)
@@ -494,7 +454,6 @@ class Kiwoom(QAxWidget):
                 pass
         self.flag1 = True
         self.calcul_data.clear();
-
 
     def job_0901(self):
         ## 거래량 급증 데이터 할당 (9시 01분 조회)

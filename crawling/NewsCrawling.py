@@ -17,7 +17,7 @@ import FinanceDataReader as fdr
 from dateutil.relativedelta import *
 import telegram
 
-class crawling():
+class NewsCrawling():
     def __init__(self):
 
         # 크롤링 시작하자마자 돌리는 __init__
@@ -35,7 +35,6 @@ class crawling():
             month = int(today[5:7])
             day = int(today[-2:])
             return dayOfTheWeek[date(year, month, day).weekday()]
-
 
         # 날짜 포맷 바꾸기(yyyy-mm-dd -> yyyy.mm.dd)
         def format_change(today):
@@ -60,7 +59,7 @@ class crawling():
         stock_list = pd.DataFrame(stock_df, columns=["회사명", "종목코드"])
 
         ## 테스트용
-        stock_list = stock_list[:10]
+        #stock_list = stock_list[:500]
 
         ##날짜 갖고오기 (2020.11.19)
         today = format_change(str(datetime.now().date() + relativedelta(days=-0)))
@@ -155,7 +154,7 @@ class crawling():
         volume_dict = {"종목코드": second_step_data["종목코드"], "9:00_거래량": new_stock_start_volume,
                        "15:30_거래량": new_stock_last_volume}
         volume_df = pd.DataFrame(volume_dict)
-        self.result_data = pd.merge(second_step_data, volume_df, how='inner', on=None)
+        self.news_crawling_result_data = pd.merge(second_step_data, volume_df, how='inner', on=None)
 
         print("***************************************************************************")
         print("************************** 뉴스 크롤링 끝 ***********************************")
