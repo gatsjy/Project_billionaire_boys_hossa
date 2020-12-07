@@ -59,7 +59,7 @@ class NewsCrawling():
         stock_list = pd.DataFrame(stock_df, columns=["회사명", "종목코드"])
 
         ## 테스트용
-        #stock_list = stock_list[:500]
+        #stock_list = stock_list[:10]
 
         ##날짜 갖고오기 (2020.11.19)
         today = format_change(str(datetime.now().date() + relativedelta(days=-0)))
@@ -90,7 +90,7 @@ class NewsCrawling():
         print("첫번째 조건 종목 개수 :", len(first_step_data), "_동전주 1200이상 적용")
 
         ##############################test용 설정 ####################################
-        raw_step_data = raw_step_data[:10]
+        #raw_step_data = raw_step_data[:10]
         ##############################################################################
 
         ##조건2. OUTPUT = second_step_data, 뉴스 크롤링, 전날 뉴스 0건인 자료
@@ -126,8 +126,11 @@ class NewsCrawling():
 
         ###########9시00분 거래량, 15시30분 거래량###############
         D_day_non_format = format_change_1(D_day)
-        yesterday_start_data = f'{D_day_non_format}0901'  # 1분으로 설정하면 첫번째 가격을 알 수 있음
-        yesterday_last_data = f"{D_day_non_format}1531"  # 31분으로 설정하면 마지막 가격을 알 수 있음
+        #yesterday_start_data = f'{D_day_non_format}0901'  # 1분으로 설정하면 첫번째 가격을 알 수 있음
+        #yesterday_last_data = f"{D_day_non_format}1531"  # 31분으로 설정하면 마지막 가격을 알 수 있음
+        yesterday_start_data = f'{D_day_non_format}090000'  # 1분으로 설정하면 첫번째 가격을 알 수 있음
+        yesterday_last_data = f"{D_day_non_format}153000"  # 31분으로 설정하면 마지막 가격을 알 수 있음
+        yesterday_last_second_data = f"{D_day_non_format}170000"  # 31분으로 설정하면 마지막 가격을 알 수 있음
 
         new_stock_start_volume = []  # 9시00분 거래량
         new_stock_last_volume = []  # 15시30분 거래량
@@ -139,7 +142,6 @@ class NewsCrawling():
             todayPrices = todayurlhtml.select('body > table.type2 > tr:nth-child(3) > td > span')
             if len(todayPrices) > 5:
                 todayTradesVolume = int(todayPrices[6].text.replace(',', ''))
-                todayFirstPrice = int(todayPrices[1].text.replace(',', ''))
             new_stock_start_volume.append(todayTradesVolume)
 
             todayurl = f"https://finance.naver.com/item/sise_time.nhn?code={stock_code}&thistime={yesterday_last_data}"
@@ -148,7 +150,23 @@ class NewsCrawling():
             todayPrices = todayurlhtml.select('body > table.type2 > tr:nth-child(3) > td > span')
             if len(todayPrices) > 5:
                 todayTradesVolume = int(todayPrices[6].text.replace(',', ''))
-                todayFirstPrice = int(todayPrices[1].text.replace(',', ''))
+                lastfirstTradesVolume = int(todayPrices[5].text.replace(',', ''))
+
+            ## * 참고 : [0] : 체결시각 [1] : 체결가 [2] : 전일비 [3] : 매도 [4] : 매수 [5] : 거래량 [6] : 변동량
+            ## 2020-12-07, 한주안, (수정 전) 전일 15:30 거래량 -> (수정 후) 전일 15:30 거래량 + 장 마감하고 나서 진행되는 거래량을 더한다.(ex 15:35, 15:40.. 등등)
+            todayurl = f"https://finance.naver.com/item/sise_time.nhn?code={stock_code}&thistime={yesterday_last_second_data}"
+            raw = requests.get(todayurl, headers={'User-Agent': 'Mozilla/5.0'})
+            todayurlhtml = BeautifulSoup(raw.text, "html.parser")
+            todayPrices = todayurlhtml.select('body > table.type2 > tr:nth-child(3) > td > span')
+            if len(todayPrices) > 5:
+                lastsecondTradesVolume = int(todayPrices[5].text.replace(',', ''))
+
+            plusTradesVolume = 0
+            if lastsecondTradesVolume != 0:
+                plusTradesVolume = lastsecondTradesVolume-lastfirstTradesVolume
+
+            todayTradesVolume = todayTradesVolume + plusTradesVolume
+
             new_stock_last_volume.append(todayTradesVolume)
 
         volume_dict = {"종목코드": second_step_data["종목코드"], "9:00_거래량": new_stock_start_volume,

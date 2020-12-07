@@ -94,8 +94,8 @@ class Kiwoom(QAxWidget):
         ## 파이썬 스케줄러로 각각 9시 00분 / 9시01분에 돌려야함
         self.flag1 = False
         self.flag2 = False
-        schedule.every().days.at("09:00:10").do(self.job_0900)
-        schedule.every().days.at("09:01:15").do(self.job_0901)
+        schedule.every().days.at("09:00:15").do(self.job_0900)
+        schedule.every().days.at("09:01:20").do(self.job_0901)
         while self.flag1 == False:
             schedule.run_pending()
             time.sleep(1)
@@ -134,7 +134,7 @@ class Kiwoom(QAxWidget):
 
             for stock in self.selected_stock_list:
                 # 729845849(나한테 보내기) , -1001360628906(호싸 채팅방)
-                bot.sendMessage('729845849', stock)
+                bot.sendMessage('-1001360628906', stock)
                 # 보내고 3초동안 쉬기.. 1분에 20개의 메세지 밖에 보내지 못한다.
                 time.sleep(3);
 
@@ -450,6 +450,8 @@ class Kiwoom(QAxWidget):
             if stock[0] in self.stock_info_list:
                 self.stock_info_list[stock[0]]['today0900Price'] = stock[1]
                 self.stock_info_list[stock[0]]['today0900UpPercent'] = stock[2]
+                #2020-12-07, 한주안, (수정) 용태가 원하는 것은 0900의 거래량이였음
+                self.stock_info_list[stock[0]]['todayTradesVolume'] = stock[3]
             else:
                 pass
         self.flag1 = True
@@ -469,7 +471,8 @@ class Kiwoom(QAxWidget):
             if stock[0] in self.stock_info_list:
                 self.stock_info_list[stock[0]]['today0901Price'] = stock[1]
                 self.stock_info_list[stock[0]]['today0901UpPercent'] = stock[2]
-                self.stock_info_list[stock[0]]['todayTradesVolume'] = stock[3]
+                #2020-12-07, 한주안, (수정 전) 0901의 거래량 -> (수정 후) 0900의 거래량 // 용태가 원하는 것은 0900의 거래량
+                #self.stock_info_list[stock[0]]['todayTradesVolume'] = stock[3]
             else:
                 pass
         self.flag2 = True

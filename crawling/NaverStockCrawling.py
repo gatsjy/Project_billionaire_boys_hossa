@@ -20,10 +20,6 @@ class NaverStockCrawling():
         print("************************** 네시버 증시 크롤링 시작 ****************************")
         print("***************************************************************************")
 
-        #############################################
-        ## 키움 api 시작하기 전에 네이버 크롤링을 통해 원하는 데이터를 가져와서 비교하는 로직 입니다
-        #############################################
-
         print(news_crawling_result_data)
 
         # 다른 모듈과 의사소통할 전역 변수
@@ -38,39 +34,34 @@ class NaverStockCrawling():
         stock_list = stock_list['종목코드']
         ##############################################################################
 
-        yesterdaylast = '20201204153000'
-        yesterdayfirst = '20201204090000'
-        #yesterdayfirst = '20201203100000'  ## 수능날이여서 늦게 오픈
+        yesterdaylastfirst = '20201207153000'
+        yesterdaylastsecond = '2020120180000'
 
         ## * 참고 : [0] : 체결시각 [1] : 체결가 [2] : 전일비 [3] : 매도 [4] : 매수 [5] : 거래량 [6] : 변동량
         # 9시 되기 되기 전에 가져와야 할 것
         # 전날 15시 30분 00초 가격, 전날 15시 30분 00초 거래량, 전날 09시 01분 00초 거래량
         for stock in stock_list:
-            yesterdaylasturl = f"https://finance.naver.com/item/sise_time.nhn?code={stock}&thistime={yesterdaylast}"
-            raw = requests.get(yesterdaylasturl, headers={'User-Agent': 'Mozilla/5.0'})
-            yesterdaylasthtml = BeautifulSoup(raw.text, "html.parser")
-            yesterdaylastPrices = yesterdaylasthtml.select('body > table.type2 > tr:nth-child(3) > td > span')
+            yesterdaylastfirsturl = f"https://finance.naver.com/item/sise_time.nhn?code={stock}&thistime={yesterdaylastfirst}"
+            raw = requests.get(yesterdaylastfirsturl, headers={'User-Agent': 'Mozilla/5.0'})
+            yesterdaylastfirsthtml = BeautifulSoup(raw.text, "html.parser")
+            yesterdaylastfirstPrices = yesterdaylastfirsthtml.select('body > table.type2 > tr:nth-child(3) > td > span')
 
-            yesterdayfirsturl = f"https://finance.naver.com/item/sise_time.nhn?code={stock}&thistime={yesterdayfirst}"
-            raw = requests.get(yesterdayfirsturl, headers={'User-Agent': 'Mozilla/5.0'})
-            yesterdayfirsthtml = BeautifulSoup(raw.text, "html.parser")
-            yesterdayfirstPrices = yesterdayfirsthtml.select('body > table.type2 > tr:nth-child(3) > td > span')
+            yesterdaylastsecondurl = f"https://finance.naver.com/item/sise_time.nhn?code={stock}&thistime={yesterdaylastsecond}"
+            raw = requests.get(yesterdaylastsecondurl, headers={'User-Agent': 'Mozilla/5.0'})
+            yesterdaylastsecondhtml = BeautifulSoup(raw.text, "html.parser")
+            yesterdaylastsecondPrices = yesterdaylastsecondhtml.select('body > table.type2 > tr:nth-child(3) > td > span')
 
             stock_info = {}
-            if len(yesterdaylastPrices) > 5:
-                prevLastTradesVolume = int(yesterdaylastPrices[6].text.replace(',', ''))
-                prevLastPrice = int(yesterdaylastPrices[1].text.replace(',', ''))
-                stock_info['prevLastTradesVolume'] = prevLastTradesVolume  # 전날 15시 30분 00초 거래량
-                stock_info['prevLastPrice'] = prevLastPrice  # 전날 15시 30분 00초 가격
+            prevlastFirstTradesVolume = 0
+            if len(yesterdaylastfirstPrices) > 5:
+                prevlastFirstTradesVolume = int(yesterdaylastfirstPrices[5].text.replace(',', ''))
 
-            if len(yesterdayfirstPrices) > 5:
-                prevFirstTradesVolume = int(yesterdayfirstPrices[6].text.replace(',', ''))
-                # 전날 09시 01분 00초 거래량
-                stock_info['prevFirstTradesVolume'] = prevFirstTradesVolume
+            prevlastSecondTradesVolume = 0
+            if len(yesterdaylastsecondPrices) > 5:
+                prevlastSecondTradesVolume = int(yesterdaylastsecondPrices[5].text.replace(',', ''))
 
-            self.stock_info_list.update({stock: stock_info})
-
-        print(self.stock_info_list)
+            if prevlastSecondTradesVolume != 0 :
+                plusTradesVolume = prevlastSecondTradesVolume-prevlastFirstTradesVolume
 
         print("***************************************************************************")
         print("************************** 네시버 증시 크롤링 끝 *****************************")
