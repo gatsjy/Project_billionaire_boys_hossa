@@ -55,6 +55,7 @@ class Kiwoom(QAxWidget):
         # self.request_stock_price = None # 업종별주가요청
         self.tradeHigh_kiwoom_db_event_loop1 = None
         self.tradeHigh_kiwoom_db_event_loop2 = None
+        self.trade_present_kiwoom_db_event_loop = None  ## 시가대비등락률요청
         #########################################
 
         ### 계좌 관련된 변수 ###
@@ -106,7 +107,7 @@ class Kiwoom(QAxWidget):
         ## 조건식 계산
         if self.flag2 :
             for item in self.stock_info_list.items():
-                if len(item[1]) > 8:
+                if len(item[1]) > 9:
                     prevFirstTradesVolume = int(item[1]['prevFirstTradesVolume'])
                     prevLastPrice = int(item[1]['prevLastPrice'])
                     prevLastTradesVolume = int(item[1]['prevLastTradesVolume'])
@@ -115,18 +116,25 @@ class Kiwoom(QAxWidget):
                     today0900Price = int(item[1]['today0900Price'][1:])
                     today0900UpPercent = float(item[1]['today0900UpPercent'])
 
+                    # 2020-12-08, 한주안, 금일 시초가 추가
+                    today0900StartPrice = int(item[1]['today0900StartPrice'])
+
                     today0901Price = int(item[1]['today0901Price'][1:])
                     today0901UpPercent = float(item[1]['today0901UpPercent'])
+
                     # 3) 전일 종가 대비 금일 시초가가 상승이 4% 미만
-                    #if today0900Price > prevLastPrice:
-                    if today0900UpPercent > 0.02 and today0900UpPercent < 4:
-                        # 4) 금일 9시 00분 거래량이 전일 9시 00분 거래량보다 많다.
-                        if prevFirstTradesVolume < todayTradesVolume:
-                            # 5) 전일 15시 30분 거래량 보다 금일 9시 00분 거래량이 많다.
-                            if prevLastTradesVolume < todayTradesVolume :
-                                #6) 금일 9시 00분 종가(=9시 01분 현재가) 대비 전일 종가 상승 4% 미만
-                                if today0901UpPercent > 0.02 and today0901UpPercent < 4:
-                                    self.selected_stock_list.append(item[0])
+                    # 0.02 < (금일 시가 - 어제 종가) / 어제 종가 * 100 > 4
+                    if today0900StartPrice > prevLastPrice:
+                        if (today0900StartPrice-prevLastPrice)/prevLastPrice*100 > 0.02 and (today0900StartPrice-prevLastPrice)/prevLastPrice*100 < 4:
+                            # 4) 금일 9시 00분 거래량이 전일 9시 00분 거래량보다 많다.
+                            if prevFirstTradesVolume < todayTradesVolume:
+                                # 5) 전일 15시 30분 거래량 보다 금일 9시 00분 거래량이 많다.
+                                if prevLastTradesVolume < todayTradesVolume :
+                                    #6) 금일 9시 00분 종가(=9시 01분 현재가) 대비 전일 종가 상승 4% 미만
+                                    if today0900UpPercent > 0.02 and today0900UpPercent < 4:
+                                        #7) 매수세, 매도세 관련 조건 추가 (0900현재가 - 금일 시가) > 0)
+                                            if today0900Price-today0900StartPrice > 0:
+                                                self.selected_stock_list.append(item[0])
 
             ## telegram 푸시 메세지 관련 코드
             telgm_token = "1308465026:AAHOrMFyULrupxEnhkPIsNjGJ0o-4uF0q7U"
@@ -136,7 +144,7 @@ class Kiwoom(QAxWidget):
                 # 729845849(나한테 보내기) , -1001360628906(호싸 채팅방)
                 bot.sendMessage('-1001360628906', stock)
                 # 보내고 3초동안 쉬기.. 1분에 20개의 메세지 밖에 보내지 못한다.
-                time.sleep(3);
+                time.sleep(3.5);
 
             print("-----end----") # 중단점 찍기위해서 넣어준 코드
 
@@ -321,6 +329,30 @@ class Kiwoom(QAxWidget):
             else:
                 self.tradeHigh_kiwoom_db_event_loop1.exit()
 
+        elif sRQName == "시가대비등락률요청" and self.flag1 is False:
+            cnt = self.dynamicCall("GetRepeatCnt(QString, QString)", sTrCode, sRQName)
+
+            for i in range(cnt):
+                data = []
+
+                info1 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "종목코드")
+                info2 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "종목명")
+                info3 = self.dynamicCall("GetCommData(QString, QString, int, QString)", sTrCode, sRQName, i, "시가")
+
+                data.append(info1.strip())
+                data.append(info2.strip())
+                data.append(info3.strip())
+
+                self.calcul_data.append(data.copy())
+                print(data)
+
+            print("sPreNext : %s" % sPrevNext)
+
+            if sPrevNext == "2":
+                self.trade_present_kiwoom_db(sPrevNext=sPrevNext)
+            else:
+                self.trade_present_kiwoom_db_event_loop.exit()
+
         elif sRQName == "거래량급증요청" and self.flag1 is True:
             cnt = self.dynamicCall("GetRepeatCnt(QString, QString)", sTrCode, sRQName)
 
@@ -420,6 +452,39 @@ class Kiwoom(QAxWidget):
         # 다음 코드가 진행되지 않도록 이벤트 루프를 실행해서 다음 코드가 실행되지 않게 막는다.
         self.tradeHigh_kiwoom_db_event_loop1.exec_()
 
+    ## 2020-12-08, 한주안, 09:00 실행되는 job_2 (시가대비등락률요청)
+    def trade_present_kiwoom_db(self, code=None, date=None, sPrevNext=None):
+        QTest.qWait(3600) #3.6초마다 딜레이를 준다.
+
+        self.dynamicCall("SetInputValue(QString, QString)", "정렬구분", "1")
+        self.dynamicCall("SetInputValue(QString, QString)", "거래량조건", "0000")
+        self.dynamicCall("SetInputValue(QString, QString)", "시장구분", "101")
+        self.dynamicCall("SetInputValue(QString, QString)", "상하한포함", "0")
+        self.dynamicCall("SetInputValue(QString, QString)", "종목조건", "4")
+        self.dynamicCall("SetInputValue(QString, QString)", "신용조건", "0")
+        self.dynamicCall("SetInputValue(QString, QString)", "거래대금조건", "3")
+        self.dynamicCall("SetInputValue(QString, QString)", "등락조건", "1")
+        self.dynamicCall("CommRqData(QString, QString, int, QString)","시가대비등락률요청", "opt10028", sPrevNext, self.screen_my_info)
+
+        # 다음 코드가 진행되지 않도록 이벤트 루프를 실행해서 다음 코드가 실행되지 않게 막는다.
+        self.trade_present_kiwoom_db_event_loop.exec_()
+
+    ## 09:00 실행되는 job
+    def tradeHigh_kiwoom_db1(self, code=None, date=None, sPrevNext=None):
+        QTest.qWait(3600) #3.6초마다 딜레이를 준다.
+
+        self.dynamicCall("SetInputValue(QString, QString)", "시장구분", "101")
+        self.dynamicCall("SetInputValue(QString, QString)", "정렬구분", "1")
+        self.dynamicCall("SetInputValue(QString, QString)", "시간구분", "1")
+        self.dynamicCall("SetInputValue(QString, QString)", "거래량구분", "0")
+        self.dynamicCall("SetInputValue(QString, QString)", "시간", "0")
+        self.dynamicCall("SetInputValue(QString, QString)", "종목조건", "0")
+        self.dynamicCall("SetInputValue(QString, QString)", "가격구분", "0")
+        self.dynamicCall("CommRqData(QString, QString, int, QString)","거래량급증요청", "OPT10023", sPrevNext, self.screen_my_info)
+
+        # 다음 코드가 진행되지 않도록 이벤트 루프를 실행해서 다음 코드가 실행되지 않게 막는다.
+        self.tradeHigh_kiwoom_db_event_loop1.exec_()
+
     ## 09:01 실행되는 job
     def tradeHigh_kiwoom_db2(self, code=None, date=None, sPrevNext=None):
         QTest.qWait(3600) #3.6초마다 딜레이를 준다.
@@ -452,6 +517,21 @@ class Kiwoom(QAxWidget):
                 self.stock_info_list[stock[0]]['today0900UpPercent'] = stock[2]
                 #2020-12-07, 한주안, (수정) 용태가 원하는 것은 0900의 거래량이였음
                 self.stock_info_list[stock[0]]['todayTradesVolume'] = stock[3]
+            else:
+                pass
+        self.calcul_data.clear();
+
+        print("##########################################")
+        print("##########################################")
+        print("***************job_0900_2 시작**************")
+        print("##########################################")
+        print("##########################################")
+        self.trade_present_kiwoom_db_event_loop = QEventLoop()
+        self.trade_present_kiwoom_db(sPrevNext="0")  # 거래량급증요청
+
+        for stock in self.calcul_data:
+            if stock[0] in self.stock_info_list:
+                self.stock_info_list[stock[0]]['today0900StartPrice'] = stock[2]
             else:
                 pass
         self.flag1 = True

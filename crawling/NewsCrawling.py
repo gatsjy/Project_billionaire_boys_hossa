@@ -59,7 +59,7 @@ class NewsCrawling():
         stock_list = pd.DataFrame(stock_df, columns=["회사명", "종목코드"])
 
         ## 테스트용
-        #stock_list = stock_list[:10]
+        #stock_list = stock_list[:200]
 
         ##날짜 갖고오기 (2020.11.19)
         today = format_change(str(datetime.now().date() + relativedelta(days=-0)))
@@ -90,7 +90,7 @@ class NewsCrawling():
         print("첫번째 조건 종목 개수 :", len(first_step_data), "_동전주 1200이상 적용")
 
         ##############################test용 설정 ####################################
-        #raw_step_data = raw_step_data[:10]
+        #raw_step_data = raw_step_data[:200]
         ##############################################################################
 
         ##조건2. OUTPUT = second_step_data, 뉴스 크롤링, 전날 뉴스 0건인 자료

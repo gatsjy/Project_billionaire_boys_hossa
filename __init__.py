@@ -27,7 +27,7 @@ if __name__ == "__main__":
     # 데이터 검증해보니 딱히 네이버 크롤링을 할 필요를 못느낌 -> 뉴스 크롤링 부분에서 원하는 데이터 전부 가져옴
     # 2020-12-07, 한주안, (수정) 용태와 의논해본 끝에 원하는 데이터는 전날 1530분의 거래량이 아니라 모든 거래가 끝나고 난 뒤의 거래량이였음..
     # naverStockCrawling = NaverStockCrawling(newscrawling.news_crawling_result_data);
-    # print(newscrawling.news_crawling_result_data)
+    print(newscrawling.news_crawling_result_data)
 
     # 키움 api 관련 시작
     app = QApplication(sys.argv)  # PyQt5로 실행할 파일명을 자동 설정
