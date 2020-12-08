@@ -78,7 +78,7 @@ if __name__ == "__main__":
     not_mentioned_stock_list = []
     #월요일날 실행시 금요일,토요일,일요일 뉴스 갖고오기
     for stock in first_step_data["회사명"]:
-        url = f"https://search.naver.com/search.naver?where=news&query={stock}&sm=tab_opt&sort=0&photo=0&field=1&reporter_article=&pd=3&ds={D_day}&de={D_day_1_ago}&mynews=0&refresh_start=0&related=0"
+        url = f"https://search.naver.com/search.naver?where=news&query={stock}&sm=tab_opt&sort=0&photo=0&field=0&reporter_article=&pd=3&ds={D_day}&de={D_day_1_ago}&mynews=0&refresh_start=0&related=0"
         raw = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
 
         #delay_time = random.random() + random.random()
