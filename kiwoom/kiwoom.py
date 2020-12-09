@@ -30,6 +30,8 @@ class Kiwoom(QAxWidget):
 
         # 전역 변수 세팅
         self.selected_stock_list = []
+        # 2020-12-09, 한주안, 2번째 조건 담을 변수 세팅
+        self.selected_second_stock_list = []
         self.stock_info_list = {}
 
         # 뉴스크롤링에서 가져온 데이터를 할당 합니다.
@@ -95,8 +97,10 @@ class Kiwoom(QAxWidget):
         ## 파이썬 스케줄러로 각각 9시 00분 / 9시01분에 돌려야함
         self.flag1 = False
         self.flag2 = False
-        schedule.every().days.at("09:00:15").do(self.job_0900)
-        schedule.every().days.at("09:01:20").do(self.job_0901)
+        #schedule.every().days.at("09:00:15").do(self.job_0900)
+        #schedule.every().days.at("09:01:20").do(self.job_0901)
+        schedule.every().days.at("21:45:15").do(self.job_0900)
+        schedule.every().days.at("21:46:20").do(self.job_0901)
         while self.flag1 == False:
             schedule.run_pending()
             time.sleep(1)
@@ -122,6 +126,7 @@ class Kiwoom(QAxWidget):
                     today0901Price = int(item[1]['today0901Price'][1:])
                     today0901UpPercent = float(item[1]['today0901UpPercent'])
 
+                    # 1번째 조건
                     # 3) 전일 종가 대비 금일 시초가가 상승이 4% 미만
                     # 0.02 < (금일 시가 - 어제 종가) / 어제 종가 * 100 > 4
                     if today0900StartPrice > prevLastPrice:
@@ -136,11 +141,30 @@ class Kiwoom(QAxWidget):
                                             if today0900Price-today0900StartPrice > 0:
                                                 self.selected_stock_list.append(item[0])
 
+                    # 2번째 조건
+                    if today0900StartPrice > prevLastPrice:
+                        if (today0900StartPrice-prevLastPrice)/prevLastPrice*100 > 0.02 and (today0900StartPrice-prevLastPrice)/prevLastPrice*100 < 4:
+                            if prevFirstTradesVolume < todayTradesVolume:
+                                # 5) 전일 15시 30분 거래량 보다 금일 9시 00분 거래량이 많다.
+                                if prevLastTradesVolume >= todayTradesVolume :
+                                    if today0900UpPercent > 0.02 and today0900UpPercent < 4:
+                                            if today0900Price-today0900StartPrice > 0:
+                                                self.selected_second_stock_list.append(item[0])
+
+
             ## telegram 푸시 메세지 관련 코드
             telgm_token = "1308465026:AAHOrMFyULrupxEnhkPIsNjGJ0o-4uF0q7U"
             bot = telegram.Bot(telgm_token)
 
+            bot.sendMessage('-1001360628906', '======= 첫번째(기존) 조건 종목들 =======')
             for stock in self.selected_stock_list:
+                # 729845849(나한테 보내기) , -1001360628906(호싸 채팅방)
+                bot.sendMessage('-1001360628906', stock)
+                # 보내고 3초동안 쉬기.. 1분에 20개의 메세지 밖에 보내지 못한다.
+                time.sleep(3.5);
+
+            bot.sendMessage('-1001360628906', '======= 두번째(조건 5 반대로) 조건 종목들 =======')
+            for stock in self.selected_second_stock_list:
                 # 729845849(나한테 보내기) , -1001360628906(호싸 채팅방)
                 bot.sendMessage('-1001360628906', stock)
                 # 보내고 3초동안 쉬기.. 1분에 20개의 메세지 밖에 보내지 못한다.
