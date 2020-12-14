@@ -97,10 +97,10 @@ class Kiwoom(QAxWidget):
         ## 파이썬 스케줄러로 각각 9시 00분 / 9시01분에 돌려야함
         self.flag1 = False
         self.flag2 = False
-        #schedule.every().days.at("09:00:15").do(self.job_0900)
-        #schedule.every().days.at("09:01:20").do(self.job_0901)
-        schedule.every().days.at("21:45:15").do(self.job_0900)
-        schedule.every().days.at("21:46:20").do(self.job_0901)
+        schedule.every().days.at("09:00:15").do(self.job_0900)
+        schedule.every().days.at("09:01:20").do(self.job_0901)
+        #schedule.every().days.at("12:00:15").do(self.job_0900)
+        #schedule.every().days.at("12:01:20").do(self.job_0901)
         while self.flag1 == False:
             schedule.run_pending()
             time.sleep(1)
@@ -492,22 +492,6 @@ class Kiwoom(QAxWidget):
 
         # 다음 코드가 진행되지 않도록 이벤트 루프를 실행해서 다음 코드가 실행되지 않게 막는다.
         self.trade_present_kiwoom_db_event_loop.exec_()
-
-    ## 09:00 실행되는 job
-    def tradeHigh_kiwoom_db1(self, code=None, date=None, sPrevNext=None):
-        QTest.qWait(3600) #3.6초마다 딜레이를 준다.
-
-        self.dynamicCall("SetInputValue(QString, QString)", "시장구분", "101")
-        self.dynamicCall("SetInputValue(QString, QString)", "정렬구분", "1")
-        self.dynamicCall("SetInputValue(QString, QString)", "시간구분", "1")
-        self.dynamicCall("SetInputValue(QString, QString)", "거래량구분", "0")
-        self.dynamicCall("SetInputValue(QString, QString)", "시간", "0")
-        self.dynamicCall("SetInputValue(QString, QString)", "종목조건", "0")
-        self.dynamicCall("SetInputValue(QString, QString)", "가격구분", "0")
-        self.dynamicCall("CommRqData(QString, QString, int, QString)","거래량급증요청", "OPT10023", sPrevNext, self.screen_my_info)
-
-        # 다음 코드가 진행되지 않도록 이벤트 루프를 실행해서 다음 코드가 실행되지 않게 막는다.
-        self.tradeHigh_kiwoom_db_event_loop1.exec_()
 
     ## 09:01 실행되는 job
     def tradeHigh_kiwoom_db2(self, code=None, date=None, sPrevNext=None):
