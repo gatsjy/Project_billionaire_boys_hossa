@@ -10,11 +10,13 @@ from crawling.NewsCrawling import *
 from crawling.NaverStockCrawling import *
 from kiwoom.kiwoom import *
 from PyQt5.QtWidgets import *
+import datetime
 
 class Main():
     def __init__(self):
         print("***************************************************************************")
         print("*********************** 프로그램 메인 시작 ***********************************")
+        print(datetime.datetime.now())
         print("***************************************************************************")
 
 
@@ -32,6 +34,7 @@ if __name__ == "__main__":
     # 키움 api 관련 시작
     app = QApplication(sys.argv)  # PyQt5로 실행할 파일명을 자동 설정
     kiwoom = Kiwoom(newscrawling.news_crawling_result_data)  # 키움 클래스 객체화
+    #kiwoom = Kiwoom([])  # 키움 클래스 객체화
     app.exec_()  # 이벤트 루프 실행
 
 
