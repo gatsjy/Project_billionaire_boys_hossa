@@ -7,6 +7,8 @@ import random
 import time
 import FinanceDataReader as fdr
 from dateutil.relativedelta import *
+import selenium
+from selenium import webdriver
 import telegram
 
 #Today는 금일 날짜, dayOfTheWeek,D_day는 전일 요일,날짜
@@ -115,8 +117,6 @@ if __name__ == "__main__":
 
         #first_input data
         news_count_list = []
-
-        print('크롤링을 시작합니다.')
         source = browser.page_source
         html = BeautifulSoup(source,"html.parser")
         news_wrappers = html.select('ul.list_news > li')
@@ -131,7 +131,7 @@ if __name__ == "__main__":
             not_mentioned_stock_list.append(stock)
 
     #print(not_mentioned_stock_list[:]) 크롤링 결과 종목 데이터 출력       
-   
+    browser.close() # 동적 크롤링 위한 크롬 창 닫기
     print("두번째 조건 종목 개수 :",len(not_mentioned_stock_list),"_뉴스크롤링")
     isin_filter =first_step_data["회사명"].isin(not_mentioned_stock_list)
     second_step_data = first_step_data[isin_filter] #조건2. OUTPUT = second_step_data
