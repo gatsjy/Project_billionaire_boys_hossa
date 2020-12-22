@@ -8,13 +8,15 @@
 
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime, date
+from datetime import datetime,date
 import pandas as pd
 import os
 import random
 import time
 import FinanceDataReader as fdr
 from dateutil.relativedelta import *
+import selenium
+from selenium import webdriver
 import telegram
 
 class NewsCrawling():
@@ -59,7 +61,7 @@ class NewsCrawling():
         stock_list = pd.DataFrame(stock_df, columns=["회사명", "종목코드"])
 
         ##############################test용 설정 ####################################
-        #stock_list = stock_list[:10]
+        stock_list = stock_list[:10]
         #############################################################################
 
         ##날짜 갖고오기 (2020.11.19)
@@ -91,36 +93,65 @@ class NewsCrawling():
         print("첫번째 조건 종목 개수 :", len(first_step_data), "_동전주 1200이상 적용")
 
         ##############################test용 설정 ####################################
-        #raw_step_data = raw_step_data[:10]
+        raw_step_data = raw_step_data[:10]
         ##############################################################################
 
         ##조건2. OUTPUT = second_step_data, 뉴스 크롤링, 전날 뉴스 0건인 자료
         not_mentioned_stock_list = []
+        search_list_cnt = 0  # 동적크롤링 설정을 위해 0번째 종목의 경우 네이버 뉴스 내 검색옵션버튼 누르도록 함.
+
         # 월요일날 실행시 금요일,토요일,일요일 뉴스 갖고오기
+
+        ######################동적 크롤링 추가####################
+        chrome_path = r'C:\Program Files (x86)\Google\Chrome\Application\chromedriver.exe'  # -> 크롤링용 chromedriver다운로드 및 경로설정
+        browser = webdriver.Chrome(chrome_path)
+        time.sleep(2)
+
         for stock in first_step_data["회사명"]:
-            url = f"https://search.naver.com/search.naver?where=news&query={stock}&sm=tab_opt&sort=0&photo=0&field=1&reporter_article=&pd=3&ds={D_day}&de={D_day_1_ago}&mynews=0&refresh_start=0&related=0"
-            raw = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
+            url = f"https://search.naver.com/search.naver?where=news&query={stock}&sm=tab_opt&sort=0&photo=0&field=0&reporter_article=&pd=3&ds={D_day}&de={D_day_1_ago}&docid=&nso=&mynews=1&mynews=0&refresh_start=0&related=0#"
+            browser.get(url)
+            time.sleep(1)
+            search_list_cnt += 1
 
-            # delay_time = random.random() + random.random()
-            # time.sleep(delay_time)
-            # requests응답이 없을 경우.
-            if raw.status_code != requests.codes.ok:
-                print("접속실패")
+            # 언론사 선정을 위한 뉴스 동적크롤링
+            if search_list_cnt == 1:
+                press_ok_box = browser.find_element_by_xpath('//*[@id="snb"]/div/ul/li[7]/div/a')
+                press_ok_box.click()
+                time.sleep(0.1)
 
-            html = BeautifulSoup(raw.text, "html.parser")
+                press_box = browser.find_element_by_xpath('//*[@id="snb"]/div/ul/li[5]/a')
+                press_box.click()
+                time.sleep(0.3)
+
+                press_box_economy = browser.find_element_by_xpath('//*[@id="order_cat"]/div[1]/div/a[3]')
+                press_box_economy.click()
+                time.sleep(0.1)
+
+                press_box_economy_all = browser.find_element_by_xpath('//*[@id="order_cat"]/div[4]/div[1]/div')
+                press_box_economy_all.click()
+                time.sleep(0.1)
+
+                press_ok_box = browser.find_element_by_xpath('//*[@id="snb"]/div/ul/li[5]/div/span/span[1]/button')
+                press_ok_box.click()
+                time.sleep(0.1)
+
+            # first_input data
+            news_count_list = []
+            source = browser.page_source
+            html = BeautifulSoup(source, "html.parser")
             news_wrappers = html.select('ul.list_news > li')
-
             cnt = 0
 
             for resources in news_wrappers:
                 title = resources.select_one("a.news_tit").text
                 cnt += 1
+                # print(title)  #<- 기사 잘 나오는지 확인 위함
 
             if cnt == 0:
                 not_mentioned_stock_list.append(stock)
 
         # print(not_mentioned_stock_list[:]) 크롤링 결과 종목 데이터 출력
-
+        browser.close()  # 동적 크롤링 위한 크롬 창 닫기
         print("두번째 조건 종목 개수 :", len(not_mentioned_stock_list), "_뉴스크롤링")
         isin_filter = first_step_data["회사명"].isin(not_mentioned_stock_list)
         second_step_data = first_step_data[isin_filter]  # 조건2. OUTPUT = second_step_data
