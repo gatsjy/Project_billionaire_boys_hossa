@@ -97,10 +97,10 @@ class Kiwoom(QAxWidget):
         self.flag1 = False
         self.flag2 = False
         self.flag3 = False
-        schedule.every().days.at("09:00:57").do(self.job_0900_1)
-        schedule.every().days.at("09:01:30").do(self.job_0900_2)
-        #schedule.every().days.at("23:00:57").do(self.job_0900_1)
-        #schedule.every().days.at("23:01:10").do(self.job_0900_2)
+        #schedule.every().days.at("09:00:57").do(self.job_0900_1)
+        #schedule.every().days.at("09:01:30").do(self.job_0900_2)
+        schedule.every().days.at("09:00:00").do(self.job_0900_1)
+        schedule.every().days.at("09:00:57").do(self.job_0900_2)
 
         while self.flag1 == False:
             schedule.run_pending()
@@ -462,7 +462,7 @@ class Kiwoom(QAxWidget):
         print("##########################################")
         print("***************job_0900_1 시작**************")
         print("###############거래량급증요청################")
-        print("종목코드/종목명/시가/현재가/등락률/급증량")
+        print("종목코드/현재가/등락률/급증량")
         print("##########################################")
         print(datetime.datetime.now())
         print("##########################################")
