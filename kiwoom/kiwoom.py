@@ -16,6 +16,10 @@ import schedule
 import datetime
 ##################
 
+import requests
+from bs4 import BeautifulSoup
+import pandas as pd
+
 ### telegram 관련 import ##
 import telegram
 
@@ -33,6 +37,10 @@ class Kiwoom(QAxWidget):
         self.selected_stock_list = []
         self.stock_info_list = {}
         self.selected_stock_list2 = {}
+
+        self.condition = {}  # 조건검색식 목록 받아올 변수
+        self.condition_stock_list = []
+        self.intersection = []
 
         # 뉴스크롤링에서 가져온 데이터를 할당 합니다.
         df = pd.DataFrame(news_crawling_result_data)
@@ -57,6 +65,8 @@ class Kiwoom(QAxWidget):
         # self.request_stock_price = None # 업종별주가요청
         self.tradeHigh_kiwoom_db_event_loop = None
         self.trade_present_kiwoom_db_event_loop = None  ## 시가대비등락률요청
+
+        self.conditionLoop = None
         #########################################
 
         ### 계좌 관련된 변수 ###
@@ -91,97 +101,176 @@ class Kiwoom(QAxWidget):
         #self.detail_account_info() # 예수금 요청 시그널 포함
         #self.detail_account_mystock() # 계좌평가잔고내역 가져오기
         #self.calculator_fnc()
+        self.getConditionLoad()
+        #self.sendCondition("0", "주안조건", 0, 0)
         ############################################
 
         ## 파이썬 스케줄러로
         self.flag1 = False
         self.flag2 = False
-        self.flag3 = False
-        schedule.every().days.at("09:00:57").do(self.job_0900_1)
-        schedule.every().days.at("09:01:30").do(self.job_0900_2)
-        #schedule.every().days.at("23:00:57").do(self.job_0900_1)
-        #schedule.every().days.at("23:01:10").do(self.job_0900_2)
+        schedule.every().days.at("09:01:00").do(self.job_0901)
+        #schedule.every().days.at("10:01:00").do(self.job_0901)
+        schedule.every().days.at("21:00:00").do(self.job_0901)
 
         while self.flag1 == False:
             schedule.run_pending()
             time.sleep(1)
+        
+        # 2020-12-28, 한주안, 교집합 구하기
+        self.intersection = list(set(news_crawling_result_data['종목코드'].tolist()) & set(self.condition_stock_list))
+
+        ## telegram 푸시 메세지 관련 코드
+        telgm_token = "1308465026:AAHOrMFyULrupxEnhkPIsNjGJ0o-4uF0q7U"
+        bot = telegram.Bot(telgm_token)
+
+        bot.sendMessage('-1001360628906', '======= 조건 종목 =======')
+        bot.sendMessage('-1001360628906', self.intersection)
+        #bot.sendMessage('-1001360628906', self.condition_stock_list)
+
+        print("-----end----")
+
+        schedule.every().days.at("09:01:07").do(self.job_0906)
+        #schedule.every().days.at("21:00:07").do(self.job_0906)
         while self.flag2 == False:
             schedule.run_pending()
             time.sleep(1)
 
-        ## 조건식 계산
-        if self.flag2:
-            for item in self.stock_info_list.items():
-                if len(item[1]) > 7:
-                    prevFirstTradesVolume = int(item[1]['prevFirstTradesVolume'])
-                    prevLastPrice = int(item[1]['prevLastPrice'])
-                    prevLastTradesVolume = int(item[1]['prevLastTradesVolume'])
+        print("-----end----")
+    def getConditionLoad(self):
+        print("[getConditionLoad]")
+        """ 조건식 목록 요청 메서드 """
 
-                    todayTradesVolume = int(item[1]['todayTradesVolume'])
-                    today0900Price = int(item[1]['today0900Price'][1:])
-                    today0900UpPercent = float(item[1]['today0900UpPercent'])
+        isLoad = self.dynamicCall("GetConditionLoad()")
+        # 요청 실패시
+        if not isLoad:
+            print("getConditionLoad(): 조건식 요청 실패")
 
-                    # 2020-12-08, 한주안, 금일 시초가 추가
-                    #today0900StartPrice = int(item[1]['today0900StartPrice'][1:])
-                    if(item[1]['today0900StartPrice'][0] == '+' or item[1]['today0900StartPrice'][0] == '-'):
-                        today0900StartPrice = int(item[1]['today0900StartPrice'][1:])
-                    else:
-                        today0900StartPrice = int(item[1]['today0900StartPrice'])
+        # receiveConditionVer() 이벤트 메서드에서 루프 종료
+        self.conditionLoop = QEventLoop()
+        self.conditionLoop.exec_()
 
-                    # 1번째 조건
-                    # 3) 전일 종가 대비 금일 시초가가 상승이 4% 미만
-                    # 0.02 < (금일 시가 - 어제 종가) / 어제 종가 * 100 > 4
-                    if today0900StartPrice > prevLastPrice:
-                        if (today0900StartPrice-prevLastPrice)/prevLastPrice*100 > 0.02 and (today0900StartPrice-prevLastPrice)/prevLastPrice*100 < 4:
-                            # 4) 금일 9시 00분 거래량이 전일 9시 00분 거래량보다 많다.
-                            if prevFirstTradesVolume < todayTradesVolume:
-                                # 5) 전일 15시 30분 거래량 보다 금일 9시 00분 거래량이 많다.
-                                if prevLastTradesVolume < todayTradesVolume:
-                                    #6) 금일 9시 00분 종가(=9시 01분 현재가) 대비 전일 종가 상승 4% 미만
-                                    if today0900UpPercent > 0.02 and today0900UpPercent < 4:
-                                        #7) 매수세, 매도세 관련 조건 추가 (0900현재가 - 금일 시가) > 0)
-                                        if today0900Price-today0900StartPrice > 0:
-                                            self.selected_stock_list.append(item[0])
-                                            ## 2020-12-16, 한주안, 로그데이터 추가
-                                            selected_stock_info = {}
-                                            selected_stock_info['prevFirstTradesVolume'] = prevFirstTradesVolume
-                                            selected_stock_info['prevLastPrice'] = prevLastPrice
-                                            selected_stock_info['prevLastTradesVolume'] = prevLastTradesVolume
-                                            selected_stock_info['todayTradesVolume'] = todayTradesVolume
-                                            selected_stock_info['today0900Price'] = today0900Price
-                                            selected_stock_info['today0900UpPercent'] = today0900UpPercent
-                                            selected_stock_info['today0900StartPrice'] = today0900StartPrice
-                                            selected_stock_info['stockId'] = item[0]
-                                            self.selected_stock_list2.update({item[0]: selected_stock_info})
+    def getConditionNameList(self):
+        print("[getConditionNameList]")
+        """
+        조건식 획득 메서드
+        조건식을 딕셔너리 형태로 반환합니다.
+        이 메서드는 반드시 receiveConditionVer() 이벤트 메서드안에서 사용해야 합니다.
+        :return: dict - {인덱스:조건명, 인덱스:조건명, ...}
+        """
 
-            ## telegram 푸시 메세지 관련 코드
-            telgm_token = "1308465026:AAHOrMFyULrupxEnhkPIsNjGJ0o-4uF0q7U"
-            bot = telegram.Bot(telgm_token)
+        data = self.dynamicCall("GetConditionNameList()")
 
-            bot.sendMessage('-1001360628906', '======= 조건 종목 =======')
-            for stock in self.selected_stock_list:
-                # 729845849(나한테 보내기) , -1001360628906(호싸 채팅방)
-                bot.sendMessage('-1001360628906', stock)
-                # 보내고 3초동안 쉬기.. 1분에 20개의 메세지 밖에 보내지 못한다.
-                time.sleep(3.5);
+        if data == "":
+            print("getConditionNameList(): 사용자 조건식이 없습니다.")
 
-            bot.sendMessage('-1001360628906', '======= 조건 종목(상세데이터) =======')
-            for stock in self.selected_stock_list2.items():
-                # 729845849(나한테 보내기) , -1001360628906(호싸 채팅방)
-                bot.sendMessage('-1001360628906', stock)
-                # 보내고 3초동안 쉬기.. 1분에 20개의 메세지 밖에 보내지 못한다.
-                time.sleep(3.5);
+        conditionList = data.split(';')
+        del conditionList[-1]
 
-            print("-----end----")
+        conditionDictionary = {}
 
-            ## 09:03
-            schedule.every().days.at("09:05:00").do(self.job_0905)
-            #schedule.every().days.at("12:05:00").do(self.job_0905)
-            while self.flag3 == False:
-                schedule.run_pending()
-                time.sleep(1)
+        for condition in conditionList:
+            key, value = condition.split('^')
+            conditionDictionary[int(key)] = value
 
-            print("-----end----") # 중단점 찍기위해서 넣어준 코드
+        return conditionDictionary
+
+    def sendCondition(self, screenNo, conditionName, conditionIndex, isRealTime):
+        print("[sendCondition]")
+        """
+        종목 조건검색 요청 메서드
+
+        이 메서드로 얻고자 하는 것은 해당 조건에 맞는 종목코드이다.
+        해당 종목에 대한 상세정보는 setRealReg() 메서드로 요청할 수 있다.
+        요청이 실패하는 경우는, 해당 조건식이 없거나, 조건명과 인덱스가 맞지 않거나, 조회 횟수를 초과하는 경우 발생한다.
+
+        조건검색에 대한 결과는
+        1회성 조회의 경우, receiveTrCondition() 이벤트로 결과값이 전달되며
+        실시간 조회의 경우, receiveTrCondition()과 receiveRealCondition() 이벤트로 결과값이 전달된다.
+
+        :param screenNo: string
+        :param conditionName: string - 조건식 이름
+        :param conditionIndex: int - 조건식 인덱스
+        :param isRealTime: int - 조건검색 조회구분(0: 1회성 조회, 1: 실시간 조회)
+        """
+
+        isRequest = self.dynamicCall("SendCondition(QString, QString, int, int",
+                                     screenNo, conditionName, conditionIndex, isRealTime)
+
+        if not isRequest:
+            print("sendCondition(): 조건검색 요청 실패")
+
+        # receiveTrCondition() 이벤트 메서드에서 루프 종료
+        self.conditionLoop = QEventLoop()
+        self.conditionLoop.exec_()
+
+    def sendConditionStop(self, screenNo, conditionName, conditionIndex):
+
+        print("[sendConditionStop]")
+        """ 종목 조건검색 중지 메서드 """
+
+        self.dynamicCall("SendConditionStop(QString, QString, int)", screenNo, conditionName, conditionIndex)
+
+    def receiveConditionVer(self, receive, msg):
+        """
+        getConditionLoad() 메서드의 조건식 목록 요청에 대한 응답 이벤트
+
+        :param receive: int - 응답결과(1: 성공, 나머지 실패)
+        :param msg: string - 메세지
+        """
+        print("[receiveConditionVer]")
+        try:
+            if not receive:
+                return
+
+            self.condition = self.getConditionNameList()
+            print("조건식 개수: ", len(self.condition))
+
+            for key in self.condition.keys():
+                print("조건식: ", key, ": ", self.condition[key])
+
+        except Exception as e:
+            print(e)
+
+        finally:
+            self.conditionLoop.exit()
+
+    def receiveTrCondition(self, screenNo, codes, conditionName, conditionIndex, inquiry):
+        """
+        (1회성, 실시간) 종목 조건검색 요청시 발생되는 이벤트
+
+        :param screenNo: string
+        :param codes: string - 종목코드 목록(각 종목은 세미콜론으로 구분됨)
+        :param conditionName: string - 조건식 이름
+        :param conditionIndex: int - 조건식 인덱스
+        :param inquiry: int - 조회구분(0: 남은데이터 없음, 2: 남은데이터 있음)
+        """
+        print("[receiveTrCondition]")
+        try:
+            if codes == "":
+                return
+
+            codeList = codes.split(';')
+            del codeList[-1]
+            self.condition_stock_list = codeList
+            print(codeList)
+            print("종목개수: ", len(codeList))
+
+        finally:
+            self.conditionLoop.exit()
+
+    def receiveRealCondition(self, code, event, conditionName, conditionIndex):
+        print("[receiveRealCondition]")
+        """
+        실시간 종목 조건검색 요청시 발생되는 이벤트
+
+        :param code: string - 종목코드
+        :param event: string - 이벤트종류("I": 종목편입, "D": 종목이탈)
+        :param conditionName: string - 조건식 이름
+        :param conditionIndex: string - 조건식 인덱스(여기서만 인덱스가 string 타입으로 전달됨)
+        """
+
+        print("종목코드: {}, 종목명: {}".format(code, self.get_master_code_name(code)))
+        print("이벤트: ", "종목편입" if event == "I" else "종목이탈")
 
     def get_ocx_instance(self):
         self.setControl("KHOPENAPI.KHOpenAPICtrl.1") #레지스트리에 저장된 API 모듈 불러오기
@@ -190,14 +279,17 @@ class Kiwoom(QAxWidget):
         self.OnEventConnect.connect(self.login_slot) # 로그인 관련 이벤트
         self.OnReceiveTrData.connect(self.trdata_slot) # 트랜잭션 요청 관련 이벤트
 
+        ## 조건검색식 관련 추가
+        self.OnReceiveConditionVer.connect(self.receiveConditionVer)
+        self.OnReceiveTrCondition.connect(self.receiveTrCondition)
+        self.OnReceiveRealCondition.connect(self.receiveRealCondition)
+
     def signal_login_commConnect(self):
         self.dynamicCall("CommConnect()") # 로그인 요청 시그널
-
         self.login_event_loop.exec_()
 
     def login_slot(self, err_code):
         print(errors(err_code)[1])
-
         #로그인 처리가 완료됐으면 이벤트 루프를 종료한다.
         self.login_event_loop.exit()
 
@@ -457,67 +549,46 @@ class Kiwoom(QAxWidget):
         self.trade_present_kiwoom_db_event_loop.exec_()
 
     #2020-12-14, 한주안, 추가
-    def job_0900_1(self):
+    def job_0901(self):
         print("##########################################")
         print("##########################################")
-        print("***************job_0900_1 시작**************")
-        print("###############거래량급증요청################")
-        print("종목코드/종목명/시가/현재가/등락률/급증량")
-        print("##########################################")
+        print("***************job_0901 시작**************")
+        print("###############조건식검색시작################")
         print(datetime.datetime.now())
         print("##########################################")
-        self.tradeHigh_kiwoom_db_event_loop = QEventLoop()
-        self.tradeHigh_kiwoom_db(sPrevNext="0")  # 거래량급증요청
-
-        for stock in self.calcul_data:
-            if stock[0] in self.stock_info_list:
-                self.stock_info_list[stock[0]]['today0900Price'] = stock[1]
-                self.stock_info_list[stock[0]]['today0900UpPercent'] = stock[2]
-                #2020-12-07, 한주안, (수정) 용태가 원하는 것은 0900의 거래량이였음
-                self.stock_info_list[stock[0]]['todayTradesVolume'] = stock[3]
-            else:
-                pass
+        self.sendCondition("0", "주안조건", 0, 0)
         self.flag1 = True
-        self.calcul_data.clear();
 
-    def job_0900_2(self):
-        ## 거래량 급증 데이터 할당 (9시 00분 조회)
+    #2020-12-29, 한주안, 추가
+    def job_0906(self):
         print("##########################################")
         print("##########################################")
-        print("***************job_0900_2 시작**************")
-        print("###############시가대비등락률###############")
-        print("종목코드/종목명/시가/현재가/현재거래량")
-        print("##########################################")
+        #print("***************job_0906 시작**************")
+        print("###############네이버주식크롤링시작##########")
+        print("# 5) 전일 15시 30분 거래량 보다 금일 9시 00분 거래량이 많다.##")
         print(datetime.datetime.now())
         print("##########################################")
-        self.trade_present_kiwoom_db_event_loop = QEventLoop()
-        self.trade_present_kiwoom_db(sPrevNext="0")  # 시가대비등락률요청
+        # 9시1분 6초로 시작하기
+        # 2021-01-04, 한주안, 크롤링 안돌려보기로함
+        for stock in self.intersection:
+            prevLastTradesVolume  = int(self.stock_info_list[stock]['prevLastTradesVolume'])
+            todayDate = '20210115090100'
+            today0901url = f"https://finance.naver.com/item/sise_time.nhn?code={stock}&thistime={todayDate}"
+            raw = requests.get(today0901url, headers={'User-Agent': 'Mozilla/5.0'})
+            today0901urlhtml = BeautifulSoup(raw.text, "html.parser")
+            today0901urlPrices = today0901urlhtml.select('body > table.type2 > tr:nth-child(3) > td > span')
 
-        for stock in self.calcul_data:
-            if stock[0] in self.stock_info_list:
-                self.stock_info_list[stock[0]]['today0900StartPrice'] = stock[2]
-            else:
-                pass
+            prevlastFirstTradesVolume = 0
+            if len(today0901urlPrices) > 5:
+                prevlastFirstTradesVolume = int(today0901urlPrices[5].text.replace(',', ''))
+
+            if (prevLastTradesVolume)*2 < prevlastFirstTradesVolume:
+                self.selected_stock_list.append(stock)
+
+        ## telegram 푸시 메세지 관련 코드
+        telgm_token = "1308465026:AAHOrMFyULrupxEnhkPIsNjGJ0o-4uF0q7U"
+        bot = telegram.Bot(telgm_token)
+
+        bot.sendMessage('-1001360628906', '======= 조건(5포함) 조건 종목 =======')
+        bot.sendMessage('-1001360628906', self.selected_stock_list)
         self.flag2 = True
-        self.calcul_data.clear();
-
-    def job_0905(self):
-        print("##########################################")
-        print("##########################################")
-        print("***************job_0905 시작**************")
-        print("###############시가대비등락률###############")
-        print("종목코드/종목명/시가/현재가/현재거래량")
-        print("##########################################")
-        print(datetime.datetime.now())
-        print("##########################################")
-        self.trade_present_kiwoom_db_event_loop = QEventLoop()
-        self.trade_present_kiwoom_db(sPrevNext="0")  # 시가대비등락률요청
-
-        for stock in self.calcul_data:
-            if stock[0] in self.stock_info_list:
-                self.stock_info_list[stock[0]]['today0903Price'] = stock[3]
-                self.stock_info_list[stock[0]]['today0903TradeVolume'] = stock[4]
-            else:
-                pass
-        self.flag3 = True
-        self.calcul_data.clear();

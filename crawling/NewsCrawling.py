@@ -82,6 +82,8 @@ class NewsCrawling():
         else:
             D_day = D_day_1_ago
 
+        #D_day = "2020.12.30"  ## 25일 공휴일이라 임의로 24일 설정
+
         Close_list = [fdr.DataReader(f"{x}", D_day, D_day)["Close"] for x in stock_list["종목코드"]]
         raw_df = pd.DataFrame(Close_list)
         Close_df = pd.DataFrame(raw_df.values, columns=[f"{D_day}_종가"])
@@ -147,7 +149,9 @@ class NewsCrawling():
                 cnt += 1
                 # print(title)  #<- 기사 잘 나오는지 확인 위함
 
-            if cnt == 0:
+            #2021-01-04, 한주안, 언급있는 사항으로 돌려봄
+            #if cnt == 0:
+            if not cnt == 0:
                 not_mentioned_stock_list.append(stock)
 
         # print(not_mentioned_stock_list[:]) 크롤링 결과 종목 데이터 출력
