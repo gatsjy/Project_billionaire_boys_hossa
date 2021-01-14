@@ -77,7 +77,8 @@ if __name__ == "__main__":
    
 
     ##조건2. OUTPUT = second_step_data, 뉴스 크롤링, 전날 뉴스 0건인 자료
-    not_mentioned_stock_list = []
+    not_mentioned_stock_list = []   #뉴스 0건인 자료
+    mentioned_stock_list = []    #뉴스 1건 이상인 자료
     search_list_cnt = 0 #동적크롤링 설정을 위해 0번째 종목의 경우 네이버 뉴스 내 검색옵션버튼 누르도록 함.
 
     #월요일날 실행시 금요일,토요일,일요일 뉴스 갖고오기
@@ -127,9 +128,17 @@ if __name__ == "__main__":
             cnt += 1
             #print(title)  #<- 기사 잘 나오는지 확인 위함
 
-        if cnt == 0:
-            not_mentioned_stock_list.append(stock)
+        #뉴스 기사 없는것 조건 cnt == 0
+#         if cnt == 0:
+#             not_mentioned_stock_list.append(stock)
 
+        #뉴스 기사 있는 조건 not cnt == 0
+        if not cnt == 0 :
+            mentioned_stock_list.append(stock)
+    
+    #뉴스 기사 있는 조건 활용을 위해 not_mentioned_stock_list을 공용 변수로 사용
+    not_mentioned_stock_list=mentioned_stock_list
+    
     #print(not_mentioned_stock_list[:]) 크롤링 결과 종목 데이터 출력       
     browser.close() # 동적 크롤링 위한 크롬 창 닫기
     print("두번째 조건 종목 개수 :",len(not_mentioned_stock_list),"_뉴스크롤링")
