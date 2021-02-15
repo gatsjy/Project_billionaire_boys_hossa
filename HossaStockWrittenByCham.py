@@ -96,6 +96,12 @@ if __name__ == "__main__":
 
         # 언론사 선정을 위한 뉴스 동적크롤링
         if search_list_cnt ==1:
+            #네이버 뉴스 내 검색 옵션 클릭 
+            press_ok_box = browser.find_element_by_xpath('//*[@id="lnb"]/div/div/div/a')
+            press_ok_box.click()
+            time.sleep(0.1)
+            
+            
             press_ok_box = browser.find_element_by_xpath('//*[@id="snb"]/div/ul/li[7]/div/a')
             press_ok_box.click()
             time.sleep(0.1)
