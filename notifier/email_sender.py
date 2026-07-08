@@ -1,38 +1,65 @@
 import smtplib
+import json
+import os
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-import os
 
-SMTP_SERVER = 'smtp.naver.com'
-SMTP_PORT = 465
-SENDER_EMAIL = os.getenv('SENDER_EMAIL', 'gkswndks123@naver.com') # 본인 네이버 아이디
-SENDER_PASSWORD = os.getenv('SENDER_PASSWORD', '여기에_앱_비밀번호_입력') # 네이버 2단계 인증용 앱 비밀번호
-RECEIVER_EMAIL = 'gkswndks123@naver.com'
+def get_email_config():
+    config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.json')
+    if not os.path.exists(config_path):
+        print("config.json 파일이 없습니다. 이메일을 전송할 수 없습니다.")
+        return None
+    with open(config_path, 'r', encoding='utf-8') as f:
+        return json.load(f).get('email_config')
 
-def send_daily_report(subject, body_html):
-    """HTML 형태의 매매 일지를 이메일로 전송합니다."""
-    # 만약 비밀번호가 설정되지 않았다면 테스트 환경이므로 건너뜀 (예외 발생 방지)
-    if SENDER_PASSWORD == '여기에_앱_비밀번호_입력' or not SENDER_PASSWORD:
-        print("[Email 모듈] 이메일 비밀번호가 설정되지 않아 메일을 발송하지 않고 터미널에 출력합니다.")
-        print(f"--- Title: {subject} ---")
-        return False
-
-    msg = MIMEMultipart('alternative')
-    msg['Subject'] = subject
-    msg['From'] = SENDER_EMAIL
-    msg['To'] = RECEIVER_EMAIL
-
-    html_part = MIMEText(body_html, 'html', 'utf-8')
-    msg.attach(html_part)
-
+def send_daily_report(date, body_markdown):
+    """일일 매매 결과 요약 이메일 발송"""
+    config = get_email_config()
+    if not config: return
+    
+    sender_email = config['sender_email']
+    sender_password = config['sender_password']
+    receiver_email = config['receiver_email']
+    
+    msg = MIMEMultipart()
+    msg['Subject'] = f"[Billionaire Boys] {date} 자동매매 일지 브리핑"
+    msg['From'] = sender_email
+    msg['To'] = receiver_email
+    
+    # Markdown -> 간단한 Text로 변환해서 발송
+    msg.attach(MIMEText(body_markdown, 'plain', 'utf-8'))
+    
     try:
-        # 네이버 SMTP는 SSL 포트 465 사용
-        smtp = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT)
-        smtp.login(SENDER_EMAIL, SENDER_PASSWORD)
-        smtp.sendmail(SENDER_EMAIL, RECEIVER_EMAIL, msg.as_string())
-        smtp.quit()
-        print(f"✅ 이메일 발송 성공: {RECEIVER_EMAIL}")
-        return True
+        # 네이버 메일은 SSL 포트 465 사용
+        server = smtplib.SMTP_SSL(config['smtp_server'], config['smtp_port'])
+        server.login(sender_email, sender_password)
+        server.sendmail(sender_email, receiver_email, msg.as_string())
+        server.quit()
+        print("일일 매매 일지 이메일 전송 성공!")
     except Exception as e:
-        print(f"❌ 이메일 발송 실패: {e}")
-        return False
+        print(f"이메일 전송 실패: {e}")
+
+def send_radar_alert(subject, message):
+    """장중 10분 타점 레이더 긴급 알림 이메일 발송"""
+    config = get_email_config()
+    if not config: return
+    
+    sender_email = config['sender_email']
+    sender_password = config['sender_password']
+    receiver_email = config['receiver_email']
+    
+    msg = MIMEMultipart()
+    msg['Subject'] = f"🚨 [타점 레이더] {subject}"
+    msg['From'] = sender_email
+    msg['To'] = receiver_email
+    
+    msg.attach(MIMEText(message, 'plain', 'utf-8'))
+    
+    try:
+        server = smtplib.SMTP_SSL(config['smtp_server'], config['smtp_port'])
+        server.login(sender_email, sender_password)
+        server.sendmail(sender_email, receiver_email, msg.as_string())
+        server.quit()
+        print(f"타점 알림 이메일 전송 성공: {subject}")
+    except Exception as e:
+        print(f"타점 알림 이메일 전송 실패: {e}")
