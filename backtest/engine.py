@@ -99,7 +99,7 @@ def run_backtest(start_date, end_date):
     expected_value = (win_rate/100 * avg_profit) + ((1 - win_rate/100) * avg_loss)
     
     print("\n" + "="*40)
-    print("🎯 백테스트 결과 요약 (Top 100 종목 대상)")
+    print("[ Backtest Result Summary (Top 100 Stocks) ]")
     print("="*40)
     print(f"총 매매 횟수: {len(trades_df)}회")
     print(f"승률 (Win Rate): {win_rate:.2f}%")

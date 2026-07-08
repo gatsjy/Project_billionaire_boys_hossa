@@ -2,8 +2,8 @@ import pandas as pd
 
 def apply_strategy_v1(df):
     """
-    일봉 기준 전략 v1.0
-    1. 가격 필터: 종가가 1200원 이상 5000원 이하 (소외주/동전주 탈피)
+    테마주 돌파 매매 전략 v1.1
+    1. 가격 필터 삭제: 대형주/우량주가 포함된 테마이므로 가격 무관
     2. 거래량 급등: 전일 거래량이 과거 20일 평균 거래량 대비 3배 이상 급등
     3. 모멘텀: 전일 대비 시가 갭이 -2% ~ +5% 사이
     """
@@ -14,14 +14,13 @@ def apply_strategy_v1(df):
     df['Volume_MA20'] = df['Volume'].rolling(window=20).mean()
     
     # 1. 거래량 급등 (어제 거래량이 어제 기준 20일 평균 거래량의 3배 이상인지)
-    # shift(1)을 사용하여 '어제'의 상태를 확인
     df['Prev_Volume'] = df['Volume'].shift(1)
     df['Prev_Volume_MA20'] = df['Volume_MA20'].shift(1)
     df['Volume_Spike'] = df['Prev_Volume'] >= (df['Prev_Volume_MA20'] * 3)
 
-    # 2. 가격 필터 (어제 종가 기준)
+    # 2. 가격 필터 (조건 삭제 -> 모두 True)
     df['Prev_Close'] = df['Close'].shift(1)
-    df['Price_Filter'] = (df['Prev_Close'] >= 1200) & (df['Prev_Close'] <= 5000)
+    df['Price_Filter'] = True
 
     # 3. 갭 필터 (오늘 시가 vs 어제 종가)
     df['Gap_Pct'] = (df['Open'] - df['Prev_Close']) / df['Prev_Close'] * 100
