@@ -10,6 +10,7 @@ from portfolio_manager import load_portfolio, save_portfolio
 from backtest.realistic import DEFAULT_COST
 from backtest.strategy import _atr
 from backtest.index_strategy import calculate_rsi
+from universe_updater import update_dynamic_universe
 
 HISTORY_FILE = 'alert_history.json'
 
@@ -30,9 +31,40 @@ def save_alert_history(alerts):
         json.dump(json_data, f, indent=4)
 
 def run_radar():
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 1분 주기 타점 레이더 및 실시간 가상 매매 엔진 스캔 시작...")
-    today = datetime.today().strftime('%Y-%m-%d')
+    import tempfile
+    lock_file = os.path.join(tempfile.gettempdir(), 'radar_daemon.lock')
     
+    # 락 파일이 존재하고, 생성된 지 50초 이내라면 다른 프로세스가 실행 중인 것으로 간주
+    if os.path.exists(lock_file):
+        if datetime.now().timestamp() - os.path.getmtime(lock_file) < 50:
+            print("⚠️ 이미 다른 레이더 프로세스가 실행 중입니다. 중복 실행을 방지합니다.")
+            return
+            
+    with open(lock_file, 'w') as f:
+        f.write(str(os.getpid()))
+        
+    try:
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 1분 주기 타점 레이더 및 실시간 가상 매매 엔진 스캔 시작...")
+        today = datetime.today().strftime('%Y-%m-%d')
+    
+    # 동적 유니버스 업데이트 (하루 1회)
+    theme_dir = os.path.join(os.path.dirname(__file__), 'themes')
+    dyn_csv = os.path.join(theme_dir, 'dynamic_universe.csv')
+    need_update = True
+    if os.path.exists(dyn_csv):
+        mtime = datetime.fromtimestamp(os.path.getmtime(dyn_csv))
+        if mtime.strftime('%Y-%m-%d') == today:
+            need_update = False
+            
+    if need_update:
+        print("오늘의 주도주 동적 스캔 중...")
+        update_dynamic_universe()
+        
+    stocks_df = get_theme_stocks(is_backtest=False)
+    if stocks_df.empty:
+        print("감시할 동적 유니버스 종목이 없습니다. 종료합니다.")
+        return
+        
     alerted_today = load_alert_history()
     new_alerts = []
     
@@ -309,6 +341,14 @@ def run_radar():
         print(f"새로운 매수 체결 알림 {len(new_alerts)}건 발송 완료.")
     else:
         print("조건에 부합하는 타점(매수/매도)이 없습니다.")
+
+    finally:
+        # 실행 종료 시 락 파일 해제
+        if os.path.exists(lock_file):
+            try:
+                os.remove(lock_file)
+            except:
+                pass
 
 if __name__ == "__main__":
     run_radar()

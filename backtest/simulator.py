@@ -2,8 +2,8 @@ import pandas as pd
 import os
 from datetime import datetime, timedelta
 
+from data_loader import get_daily_data, get_theme_stocks
 from strategy import apply_strategy_v1
-from data_loader import get_daily_data
 from realistic import resolve_exit, bars_from_df, evaluate, DEFAULT_COST
 
 # ---------------------------------------------------------------------------
@@ -18,16 +18,8 @@ SL = -0.07
 TIME_STOP_DAYS = 3
 
 
-def run_simulation(theme_file, start_date, end_date, cost=DEFAULT_COST):
-    print(f"[{theme_file}] 테마 백테스트 시뮬레이션 가동 중...")
-
-    theme_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'themes', theme_file)
-    if not os.path.exists(theme_path):
-        print(f"{theme_file} 테마 리스트가 없습니다.")
-        return None
-
-    theme_stocks = pd.read_csv(theme_path, dtype={'Code': str})
-    theme_stocks['Code'] = theme_stocks['Code'].apply(lambda x: str(x).zfill(6))
+def run_simulation(theme_stocks, theme_name, start_date, end_date, cost=DEFAULT_COST):
+    print(f"[{theme_name}] 백테스트 시뮬레이션 가동 중...")
 
     trades = []
     for _, row in theme_stocks.iterrows():
@@ -46,7 +38,8 @@ def run_simulation(theme_file, start_date, end_date, cost=DEFAULT_COST):
             if r is None:
                 continue
             trades.append({
-                "theme": theme_file.replace('.csv', ''),
+                "theme": theme_name,
+                "code": code,
                 "name": name,
                 "buy_date": buy_date.strftime('%Y-%m-%d'),
                 "buy_price": int(entry),
@@ -62,24 +55,29 @@ if __name__ == "__main__":
     end_dt = datetime.today()
     start_dt = end_dt - timedelta(days=365 * 3)
 
-    themes = ['nuclear.csv', 'shipbuilding.csv', 'defense.csv']
+    all_stocks = get_theme_stocks(is_backtest=True)
+    if all_stocks.empty:
+        print("백테스트 유니버스를 불러올 수 없습니다.")
+        exit()
+        
     all_trades = []
-    for t in themes:
-        tr = run_simulation(t, start_dt.strftime('%Y-%m-%d'), end_dt.strftime('%Y-%m-%d'))
+    # 테마별로 그룹화하여 시뮬레이션 실행
+    for theme_name, group_df in all_stocks.groupby('Theme'):
+        tr = run_simulation(group_df, theme_name, start_dt.strftime('%Y-%m-%d'), end_dt.strftime('%Y-%m-%d'))
         if tr:
             all_trades.extend(tr)
+            
+    if not all_trades:
+        print("시뮬레이션 완료. 체결 내역이 없습니다.")
+        exit()
 
     df_trades = pd.DataFrame(all_trades)
-    if df_trades.empty:
-        print("매매 내역이 없습니다.")
-        raise SystemExit
-
     df_trades = df_trades.sort_values(by='buy_date')
     m = evaluate(df_trades['net_pct'].tolist())   # 비용반영 지표
 
     # 테마별(비용반영)
     theme_stats = []
-    for theme in [t.replace('.csv', '') for t in themes]:
+    for theme in df_trades['theme'].unique():
         t_df = df_trades[df_trades['theme'] == theme]
         if not t_df.empty:
             tm = evaluate(t_df['net_pct'].tolist())
