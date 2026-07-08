@@ -9,6 +9,7 @@ from backtest.data_loader import get_theme_stocks
 from portfolio_manager import load_portfolio, save_portfolio
 from backtest.realistic import DEFAULT_COST
 from backtest.strategy import _atr
+from backtest.index_strategy import calculate_rsi
 
 HISTORY_FILE = 'alert_history.json'
 
@@ -117,7 +118,7 @@ def run_radar():
             
     pf['holdings'] = surviving_holdings
 
-    # 1. 매크로 공포 점수(Fear Score) 기반 인버스 헷징 타점 스캔
+    # 1. 매크로 공포 점수(Fear Score) 및 코스피 기술적 지표 기반 하이브리드 인버스 헷징
     try:
         from backtest.macro_indicators import get_macro_fear_score
         
@@ -127,16 +128,54 @@ def run_radar():
         print(f"  [매크로 공포 점수] {fear_score}/4 - {macro['recommendation']}")
         for detail in macro['details']:
             print(f"    > {detail}")
+            
+        # KOSPI 기술적 지표 계산 (index_strategy.py 로직)
+        ks11_df = fdr.DataReader('KS11')
+        technical_danger = False
+        tech_reason = ""
         
-        # Fear Score 2점 이상이면 인버스 매수 검토
-        if fear_score >= 2:
+        if len(ks11_df) >= 60:
+            ks11_df['RSI'] = calculate_rsi(ks11_df, 14)
+            ks11_df['MA20'] = ks11_df['Close'].rolling(window=20).mean()
+            ks11_df['MA60'] = ks11_df['Close'].rolling(window=60).mean()
+            
+            curr_close = float(ks11_df.iloc[-1]['Close'])
+            prev_close = float(ks11_df.iloc[-2]['Close'])
+            prev_rsi = float(ks11_df.iloc[-2]['RSI'])
+            curr_ma20 = float(ks11_df.iloc[-1]['MA20'])
+            curr_ma60 = float(ks11_df.iloc[-1]['MA60'])
+            prev_ma60 = float(ks11_df.iloc[-2]['MA60'])
+            prev_ma20 = float(ks11_df.iloc[-2]['MA20'])
+            
+            cond_overbought_reversal = (prev_rsi >= 75) and (curr_close < prev_close)
+            cond_trend_breakdown = (prev_close > prev_ma60) and (curr_close < curr_ma60)
+            cond_20ma_breakdown = (prev_close > prev_ma20) and (curr_close < curr_ma20)
+            
+            if cond_overbought_reversal:
+                technical_danger = True
+                tech_reason = f"KOSPI 과매수 역회전 (RSI {prev_rsi:.1f} -> 하락전환)"
+            elif cond_trend_breakdown:
+                technical_danger = True
+                tech_reason = f"KOSPI 60일선(수급선) 하향 돌파"
+            elif cond_20ma_breakdown:
+                technical_danger = True
+                tech_reason = f"KOSPI 20일선(생명선) 데드크로스"
+                
+        if technical_danger:
+            print(f"  [KOSPI 기술적 위험 발생] {tech_reason}")
+        
+        # Fear Score 2점 이상 OR 기술적 위험 발생 시 인버스 매수
+        if fear_score >= 2 or technical_danger:
             if '114800' not in alerted_today:
                 inv_df = fdr.DataReader('114800')
                 if not inv_df.empty:
                     curr_inv_price = int(inv_df.iloc[-1]['Close'])
                     
-                    if pf['cash'] >= 500000 and not any(h['code'] == '114800' for h in pf['holdings']):
-                        qty = int(500000 // curr_inv_price)
+                    # 인버스는 자본금 20% 한도 (공격적 헷징)
+                    invest_amount = min(pf['cash'] * 0.20, 1000000)
+                    
+                    if invest_amount >= 100000 and not any(h['code'] == '114800' for h in pf['holdings']):
+                        qty = int(invest_amount // curr_inv_price)
                         pf['cash'] -= qty * curr_inv_price
                         
                         buy_record = {
@@ -145,19 +184,24 @@ def run_radar():
                             "name": "KODEX 인버스",
                             "buy_date": today,
                             "buy_price": float(curr_inv_price),
-                            "qty": qty
+                            "qty": qty,
+                            "sl_price": curr_inv_price * 0.98,
+                            "tp_price": curr_inv_price * 1.05
                         }
                         pf['holdings'].append(buy_record)
                         pf['trade_history'].append(buy_record)
                         
-                        # 매크로 지표 상세 내역을 이메일에 포함
+                        # 이메일에 포함될 메시지 구성
                         macro_detail_str = "\n".join([f"  - {d}" for d in macro['details']])
-                        subject = f"[공포점수 {fear_score}/4] 코스피 하방 헷징 인버스 가상 매수 체결"
+                        trigger_reason = f"Fear Score {fear_score}/4" if fear_score >= 2 else f"기술적 시그널 ({tech_reason})"
+                        
+                        subject = f"[방어막 가동] 코스피 하방 헷징 인버스 매수 체결"
                         msg = (
-                            f"*[매크로 공포 점수 기반 인버스 헷징 매수 완료]*\n"
-                            f"공포 점수(Fear Score): {fear_score}/4\n"
-                            f"판정: {macro['recommendation']}\n\n"
-                            f"[매크로 지표 상세]\n{macro_detail_str}\n\n"
+                            f"*[하이브리드 인버스 헷징 매수 완료]*\n"
+                            f"진입 사유: {trigger_reason}\n\n"
+                            f"[매크로 공포 점수]: {fear_score}/4\n"
+                            f"{macro_detail_str}\n\n"
+                            f"[기술적 지표]: {'위험 (' + tech_reason + ')' if technical_danger else '안정'}\n\n"
                             f"종목: KODEX 인버스 (114800)\n"
                             f"체결가: {curr_inv_price:,}원\n"
                             f"수량: {qty}주\n"

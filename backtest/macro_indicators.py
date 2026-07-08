@@ -10,75 +10,49 @@ import numpy as np
 from datetime import datetime, timedelta
 import FinanceDataReader as fdr
 
-def get_foreign_selling_streak():
+def get_kospi_momentum():
     """
-    코스피 시장에서 외국인의 연속 순매도 일수와 누적 금액을 계산합니다.
-    Returns: dict {streak_days, cumulative_amount, is_danger}
+    코스피 지수(KS11) 자체의 투심을 확인합니다. (외국인 순매도 대체)
+    Returns: dict {current, ma20, is_danger}
     """
     try:
-        from pykrx import stock
+        df = fdr.DataReader('KS11')
+        if df.empty or len(df) < 20:
+            return {"current": 0, "ma20": 0, "is_danger": False}
         
-        end_dt = datetime.today().strftime('%Y%m%d')
-        start_dt = (datetime.today() - timedelta(days=30)).strftime('%Y%m%d')
+        curr_price = float(df.iloc[-1]['Close'])
+        ma20 = float(df['Close'].iloc[-20:].mean())
         
-        # 코스피 시장 전체의 투자자별 매매동향
-        df = stock.get_market_trading_value_by_date(start_dt, end_dt, "KOSPI")
-        
-        if df.empty:
-            return {"streak_days": 0, "cumulative_amount": 0, "is_danger": False}
-        
-        # 외국인 순매수 금액 컬럼 추출
-        foreign_col = None
-        for col in df.columns:
-            if '외국인' in str(col):
-                foreign_col = col
-                break
-        
-        if foreign_col is None:
-            return {"streak_days": 0, "cumulative_amount": 0, "is_danger": False}
-        
-        foreign_net = df[foreign_col]
-        
-        # 최근부터 연속 순매도(음수) 일수 계산
-        streak_days = 0
-        cumulative_amount = 0
-        
-        for val in reversed(foreign_net.values):
-            if val < 0:
-                streak_days += 1
-                cumulative_amount += abs(val)
-            else:
-                break
-        
-        # 위험 판단: 5일 이상 연속 순매도 AND 누적 1조원 이상
-        is_danger = streak_days >= 5 and cumulative_amount >= 1_000_000_000_000
+        # 20일 이동평균선(생명선)을 하향 이탈한 상태면 위험
+        is_danger = curr_price < ma20
         
         return {
-            "streak_days": streak_days,
-            "cumulative_amount": cumulative_amount,
+            "current": round(curr_price, 2),
+            "ma20": round(ma20, 2),
             "is_danger": is_danger
         }
     except Exception as e:
-        print(f"외국인 수급 데이터 조회 에러: {e}")
-        return {"streak_days": 0, "cumulative_amount": 0, "is_danger": False}
+        print(f"KOSPI 모멘텀 조회 에러: {e}")
+        return {"current": 0, "ma20": 0, "is_danger": False}
 
 
-def get_vkospi():
+def get_us_vix():
     """
-    VKOSPI (코스피 200 변동성지수 / 한국판 공포지수) 현재값을 조회합니다.
+    글로벌 공포지수인 미국 VIX 지수 현재값을 조회합니다. (폐지된 VKOSPI 대체)
     Returns: dict {current, is_fear}
     """
     try:
-        df = fdr.DataReader('VKOSPI')
+        df = fdr.DataReader('^VIX')
         if df.empty:
             return {"current": 0, "is_fear": False}
         
-        curr_vkospi = float(df.iloc[-1]['Close'])
-        is_fear = curr_vkospi >= 25
+        curr_vix = float(df.iloc[-1]['Close'])
+        # 일반적으로 VIX 20 초과 시 시장의 공포(변동성 심화) 상태로 간주
+        is_fear = curr_vix >= 20
         
-        return {"current": round(curr_vkospi, 2), "is_fear": is_fear}
+        return {"current": round(curr_vix, 2), "is_fear": is_fear}
     except Exception as e:
-        print(f"VKOSPI 조회 에러: {e}")
+        print(f"US VIX 조회 에러: {e}")
         return {"current": 0, "is_fear": False}
 
 
@@ -114,7 +88,7 @@ def get_us_treasury_10y():
     Returns: dict {current, prev, daily_change, is_warning}
     """
     try:
-        df = fdr.DataReader('US10YT=X')
+        df = fdr.DataReader('^TNX')
         if df.empty or len(df) < 2:
             return {"current": 0, "prev": 0, "daily_change": 0, "is_warning": False}
         
@@ -145,21 +119,21 @@ def get_macro_fear_score():
     
     Returns: dict {score, max_score, details, recommendation}
     """
-    foreign = get_foreign_selling_streak()
-    vkospi = get_vkospi()
+    kospi_mom = get_kospi_momentum()
+    vix = get_us_vix()
     usd_krw = get_usd_krw_surge()
     treasury = get_us_treasury_10y()
     
     score = 0
     details = []
     
-    if foreign['is_danger']:
+    if kospi_mom['is_danger']:
         score += 1
-        details.append(f"외국인 {foreign['streak_days']}일 연속 순매도 (누적 {foreign['cumulative_amount']/1e12:.1f}조원)")
+        details.append(f"KOSPI 투심 악화 (현재 {kospi_mom['current']}pt가 20일선 {kospi_mom['ma20']}pt 하향 이탈)")
     
-    if vkospi['is_fear']:
+    if vix['is_fear']:
         score += 1
-        details.append(f"VKOSPI 공포지수 {vkospi['current']}pt (25pt 이상)")
+        details.append(f"글로벌 VIX 공포지수 {vix['current']}pt (20pt 이상 위험 구간)")
     
     if usd_krw['is_surging']:
         score += 1
@@ -181,8 +155,8 @@ def get_macro_fear_score():
         "max_score": 4,
         "details": details,
         "recommendation": recommendation,
-        "foreign": foreign,
-        "vkospi": vkospi,
+        "kospi_mom": kospi_mom,
+        "vix": vix,
         "usd_krw": usd_krw,
         "treasury": treasury
     }

@@ -1,6 +1,28 @@
 {
   "initial_capital": 2000000,
-  "cash": 2000000,
-  "holdings": [],
-  "trade_history": []
+  "cash": 1600620,
+  "holdings": [
+    {
+      "type": "buy",
+      "code": "114800",
+      "name": "KODEX 인버스",
+      "buy_date": "2026-07-08",
+      "buy_price": 1051.0,
+      "qty": 380,
+      "sl_price": 1029.98,
+      "tp_price": 1103.55
+    }
+  ],
+  "trade_history": [
+    {
+      "type": "buy",
+      "code": "114800",
+      "name": "KODEX 인버스",
+      "buy_date": "2026-07-08",
+      "buy_price": 1051.0,
+      "qty": 380,
+      "sl_price": 1029.98,
+      "tp_price": 1103.55
+    }
+  ]
 }
