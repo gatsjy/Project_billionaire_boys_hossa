@@ -5,55 +5,34 @@ from datetime import datetime, timedelta
 import pandas as pd
 import FinanceDataReader as fdr
 
-from backtest.strategy import apply_strategy_v1
-from backtest.data_loader import get_kosdaq_list, get_theme_stocks, get_daily_data
+from backtest.data_loader import get_daily_data
+from portfolio_manager import load_portfolio, save_portfolio
+from notifier.email_sender import send_radar_alert
 
-PORTFOLIO_FILE = 'portfolio.json'
 LOG_DIR = 'trading_logs'
 
-def load_portfolio():
-    if os.path.exists(PORTFOLIO_FILE):
-        with open(PORTFOLIO_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    return {
-        "initial_capital": 2000000,
-        "cash": 2000000,
-        "holdings": [],
-        "trade_history": []
-    }
-
-def save_portfolio(pf):
-    with open(PORTFOLIO_FILE, 'w', encoding='utf-8') as f:
-        json.dump(pf, f, ensure_ascii=False, indent=2)
-
-def generate_markdown_report(today, pf, daily_trades, new_buys, total_value):
+def generate_markdown_report(today, pf, daily_trades, total_value):
     profit_amt = total_value - pf['initial_capital']
     profit_pct = (profit_amt / pf['initial_capital']) * 100
     
-    md = f"# 📈 억만장자 보이즈 클럽: 일일 매매 일지\n\n"
+    md = f"# 📈 억만장자 보이즈 클럽: 일일 가상 매매 일지\n\n"
     md += f"## 📅 일자: {today}\n"
     md += f"- **💰 초기 자본금:** {pf['initial_capital']:,} 원\n"
-    md += f"- **💵 현재 현금:** {pf['cash']:,} 원\n"
+    md += f"- **💵 현재 현금:** {int(pf['cash']):,} 원\n"
     md += f"- **📊 총 평가 자산:** {int(total_value):,} 원\n"
     md += f"- **📈 누적 수익률:** {profit_pct:.2f}%\n\n"
     
-    md += "## 🔄 당일 청산(매도) 내역\n"
+    md += "## 🔄 당일 발생 매매 내역 (실시간 체결 내역 포함)\n"
     if daily_trades:
-        md += "| 종목명 | 매수일 | 매도가 | 수익률 | 사유 |\n"
-        md += "|---|---|---|---|---|\n"
+        md += "| 종목명 | 매수일 | 체결구분 | 단가 | 수익률 | 사유 |\n"
+        md += "|---|---|---|---|---|---|\n"
         for t in daily_trades:
-            md += f"| {t['name']} | {t['buy_date']} | {int(t['sell_price']):,}원 | {t['profit_pct']:.2f}% | {t['reason']} |\n"
+            if t['type'] == 'sell':
+                md += f"| {t['name']} | {t['buy_date']} | **매도** | {int(t['sell_price']):,}원 | {t['profit_pct']:.2f}% | {t['reason']} |\n"
+            else:
+                md += f"| {t['name']} | {t['buy_date']} | **매수** | {int(t['buy_price']):,}원 | - | 레이더 시그널 포착 |\n"
     else:
-        md += "오늘 매도된 종목이 없습니다.\n"
-        
-    md += "\n## 🛒 당일 신규 매수 내역\n"
-    if new_buys:
-        md += "| 종목명 | 매수가 | 수량 |\n"
-        md += "|---|---|---|\n"
-        for b in new_buys:
-            md += f"| {b['name']} | {int(b['buy_price']):,}원 | {b['qty']}주 |\n"
-    else:
-        md += "오늘 신규 매수한 종목이 없습니다.\n"
+        md += "오늘 발생한 매매 내역이 없습니다.\n"
         
     md += "\n## 💼 현재 보유 종목 (Holdings)\n"
     if pf['holdings']:
@@ -66,166 +45,71 @@ def generate_markdown_report(today, pf, daily_trades, new_buys, total_value):
         
     return md
 
-def run_daily_paper_trading():
+def run_daily_eod_tasks():
     today = datetime.today().strftime('%Y-%m-%d')
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 가상 매매 엔진 가동 시작 (멀티 테마 감시)")
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 장 마감 EOD 결산 작업 시작")
     
     pf = load_portfolio()
-    
-    # 전체 테마주 로드
-    theme_stocks = get_theme_stocks()
-    if theme_stocks.empty:
-        print("테마주 리스트가 없어 실행을 중단합니다.")
-        return
-        
     end_dt = datetime.today()
-    start_dt = end_dt - timedelta(days=60)
+    start_dt = end_dt - timedelta(days=20)
     
-    daily_trades = []
-    new_buys = []
+    today_trades = []
     
-    # 1. 기존 보유 종목 청산 검사 (손절 -2%, 익절 +5%)
+    # 1. 3일 경과 타임스탑 청산 (종가 기준)
     surviving_holdings = []
     for h in pf['holdings']:
         code = h['code']
-        df = get_daily_data(code, start_dt.strftime('%Y-%m-%d'), end_dt.strftime('%Y-%m-%d'))
-        if df.empty:
-            surviving_holdings.append(h)
-            continue
-            
-        last_row = df.iloc[-1]
-        today_high = last_row['High']
-        today_low = last_row['Low']
-        today_close = last_row['Close']
-        
-        buy_price = h['buy_price']
-        qty = h['qty']
-        
         buy_date_obj = datetime.strptime(h['buy_date'], '%Y-%m-%d')
         days_held = (end_dt - buy_date_obj).days
         
-        sold = False
-        sell_price = 0
-        reason = ""
-        
-        if today_low <= buy_price * 0.99:
-            sell_price = buy_price * 0.99
-            reason = "손절 (-1%)"
-            sold = True
-        elif today_high >= buy_price * 1.15:
-            sell_price = buy_price * 1.15
-            reason = "익절 (+15%)"
-            sold = True
-        elif days_held >= 3:
-            sell_price = today_close
-            reason = "보유기간 3일 경과 (종가 청산)"
-            sold = True
+        if days_held >= 3:
+            df = get_daily_data(code, start_dt.strftime('%Y-%m-%d'), end_dt.strftime('%Y-%m-%d'))
+            if df.empty:
+                surviving_holdings.append(h)
+                continue
             
-        if sold:
-            profit_pct = (sell_price - buy_price) / buy_price * 100
-            pf['cash'] += sell_price * qty
+            today_close = df.iloc[-1]['Close']
+            qty = h['qty']
+            buy_price = h['buy_price']
+            
+            profit_pct = (today_close - buy_price) / buy_price * 100
+            pf['cash'] += today_close * qty
             trade_record = {
+                "type": "sell",
                 "code": code,
                 "name": h['name'],
                 "buy_date": h['buy_date'],
                 "sell_date": today,
                 "buy_price": buy_price,
-                "sell_price": sell_price,
+                "sell_price": float(today_close),
                 "profit_pct": profit_pct,
-                "reason": reason
+                "reason": "보유기간 3일 경과 (EOD 타임스탑)"
             }
-            daily_trades.append(trade_record)
             pf['trade_history'].append(trade_record)
+            today_trades.append(trade_record)
+            print(f"[{h['name']}] 타임스탑 강제 청산 (종가: {today_close}원)")
         else:
             surviving_holdings.append(h)
             
     pf['holdings'] = surviving_holdings
-    
-    # 2. 시장 전체 방향성 (인버스 헷지) 최우선 감시
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 코스피 시장 헷지(Hedge) 시그널 점검 중...")
-    try:
-        from backtest.index_strategy import apply_inverse_strategy
-        kospi_df = fdr.DataReader('KS11')
-        if not kospi_df.empty and len(kospi_df) >= 60:
-            kospi_df = apply_inverse_strategy(kospi_df)
-            if kospi_df.iloc[-1]['Inverse_Buy_Signal']:
-                print("🚨 코스피 폭락 징후 포착! KODEX 인버스 매수 우선 검토")
-                if sum(h['name'] == 'KODEX 인버스' for h in pf['holdings']) == 0:
-                    inverse_df = fdr.DataReader('114800')
-                    if not inverse_df.empty:
-                        inv_price = inverse_df.iloc[-1]['Close']
-                        if pf['cash'] >= 500000:
-                            qty = 500000 // int(inv_price)
-                            if qty > 0:
-                                pf['cash'] -= qty * int(inv_price)
-                                record = {
-                                    "code": "114800",
-                                    "name": "KODEX 인버스",
-                                    "buy_price": int(inv_price),
-                                    "qty": qty,
-                                    "buy_date": today
-                                }
-                                pf['holdings'].append(record)
-                                new_buys.append(record)
-                                # 인버스를 샀다면, 다른 개별주식은 오늘 매수하지 않음 (방어 모드)
-                                theme_stocks = pd.DataFrame()
-                                print("방어 모드 발동: 오늘 개별 테마주 신규 매수를 중단합니다.")
-    except Exception as e:
-        print(f"인버스 로직 에러: {e}")
-
-    # 3. 신규 매수 조건 검색 (테마주 한정)
-    bet_amount = 500000 
-    
-    if not theme_stocks.empty and pf['cash'] >= bet_amount:
-        print(f"신규 매수 탐색 중... (잔여 가상현금: {pf['cash']:,}원)")
-        for idx, row in theme_stocks.iterrows():
-            if pf['cash'] < bet_amount:
-                break
-                
-            code = row['Code']
-            name = row['Name']
-            
-            if any(h['code'] == code for h in pf['holdings']):
-                continue
-                
-            df = get_daily_data(code, start_dt.strftime('%Y-%m-%d'), end_dt.strftime('%Y-%m-%d'))
-            if df.empty or len(df) < 25:
-                continue
-                
-            df = apply_strategy_v1(df)
-            if df.empty:
-                continue
-                
-            last_date = df.index[-1]
-            if df.loc[last_date, 'Buy_Signal']:
-                buy_price = df.loc[last_date, 'Open']
-                if buy_price == 0: continue
-                
-                qty = int(bet_amount // buy_price)
-                if qty == 0: continue
-                
-                total_cost = buy_price * qty
-                
-                pf['cash'] -= total_cost
-                buy_record = {
-                    "code": code,
-                    "name": name,
-                    "buy_date": today,
-                    "buy_price": float(buy_price),
-                    "qty": qty
-                }
-                pf['holdings'].append(buy_record)
-                new_buys.append(buy_record)
-                print(f"[{name}] 신규 매수: {buy_price}원 x {qty}주")
-                
-    # 3. 포트폴리오 저장
     save_portfolio(pf)
     
-    # 4. 일지 생성 및 폴더에 저장
-    holdings_value = sum([h['buy_price'] * h['qty'] for h in pf['holdings']])
+    # 2. 오늘 하루 동안 장중에 발생한 매매 내역(레이더가 체결한 것들) 가져오기
+    for t in pf['trade_history']:
+        if (t.get('buy_date') == today and t.get('type') == 'buy') or (t.get('sell_date') == today and t.get('type') == 'sell'):
+            # 중복 방지를 위해 이미 today_trades에 없으면 추가
+            if t not in today_trades:
+                today_trades.append(t)
+                
+    # 3. 평가액 계산 및 일일 보고서 생성
+    holdings_value = 0
+    for h in pf['holdings']:
+        # 간이 평가를 위해 매수가를 현재가로 추정 (실제론 실시간가 필요하지만 EOD 리포트용)
+        holdings_value += h['buy_price'] * h['qty']
+        
     total_value = pf['cash'] + holdings_value
     
-    md_content = generate_markdown_report(today, pf, daily_trades, new_buys, total_value)
+    md_content = generate_markdown_report(today, pf, today_trades, total_value)
     
     if not os.path.exists(LOG_DIR):
         os.makedirs(LOG_DIR)
@@ -234,7 +118,9 @@ def run_daily_paper_trading():
     with open(log_filename, 'w', encoding='utf-8') as f:
         f.write(md_content)
         
-    print(f"가상 매매 종료. 오늘의 매매 일지가 생성되었습니다: {log_filename}")
+    # 데일리 리포트 이메일 발송
+    send_radar_alert(f"[가상매매 일지] {today} 결산 리포트", md_content)
+    print(f"가상 매매 EOD 결산 종료. 매매 일지 생성 및 이메일 발송 완료: {log_filename}")
 
 if __name__ == "__main__":
-    run_daily_paper_trading()
+    run_daily_eod_tasks()
