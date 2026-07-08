@@ -61,11 +61,11 @@ def run_radar():
                     reason = "손절 (-2%)"
                     sold = True
             else:
-                if curr_price >= buy_price * 1.15:
-                    reason = "익절 (+15%)"
+                if curr_price >= buy_price * 1.07:
+                    reason = "익절 (+7%)"
                     sold = True
-                elif curr_price <= buy_price * 0.99:
-                    reason = "손절 (-1%)"
+                elif curr_price <= buy_price * 0.98:
+                    reason = "손절 (-2%)"
                     sold = True
                     
             if sold:
@@ -186,8 +186,8 @@ def run_radar():
                                 f"종목: {name} ({code})\n"
                                 f"체결가: {curr_price:,}원\n"
                                 f"수량: {qty}주\n"
-                                f"목표 익절가: {int(curr_price * 1.15):,}원 (+15%)\n"
-                                f"손절가: {int(curr_price * 0.99):,}원 (-1%)"
+                                f"목표 익절가: {int(curr_price * 1.07):,}원 (+7%)\n"
+                                f"손절가: {int(curr_price * 0.98):,}원 (-2%)"
                             )
                             send_radar_alert(subject, msg)
                             alerted_today.append(code)
