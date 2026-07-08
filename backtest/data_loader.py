@@ -24,8 +24,8 @@ def get_theme_stocks(is_backtest=False):
         if not file.endswith('.csv'):
             continue
             
-        # 라이브 봇은 dynamic_universe.csv만 읽음
-        if not is_backtest and file != 'dynamic_universe.csv':
+        # 라이브 봇은 dynamic_universe.csv와 user_picks.csv(관심 종목)만 읽음
+        if not is_backtest and file not in ['dynamic_universe.csv', 'user_picks.csv']:
             continue
             
         theme_name = file.replace('.csv', '').capitalize()

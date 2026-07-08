@@ -274,13 +274,26 @@ def run_radar():
                 curr_vol = df['Volume'].iloc[-1]
                 curr_price = float(df['Close'].iloc[-1])
                 prev_price = float(df['Close'].iloc[-2])
+                open_price = float(df['Open'].iloc[-1])
                 
-                # 추세 필터: 전일 종가가 20일선 위에 있을 때만
+                # 1. 장중 시간 비례 예상 거래량 산출 (Time-proportional Volume)
+                now_time = datetime.now()
+                market_open = now_time.replace(hour=9, minute=0, second=0, microsecond=0)
+                elapsed_minutes = (now_time - market_open).total_seconds() / 60.0
+                elapsed_minutes = max(1, min(elapsed_minutes, 390)) # 09:00~15:30 (390분)
+                proj_vol = curr_vol * (390 / elapsed_minutes)
+                
+                # 2. 추세 필터: 전일 종가가 20일선 위에 있을 때만
                 if prev_price < ma20: continue
                 
-                # 거래량 3배 필터
-                if curr_vol >= vol_ma20 * 3 and curr_price > prev_price:
-                    open_price = df['Open'].iloc[-1]
+                # 3. 당일 양봉 필터 (Intraday Momentum) - 현재가가 시가보다 높아야 함
+                if curr_price <= open_price: continue
+                
+                # 4. 고점 추격 매수(FOMO) 방지 - 전일 종가 대비 15% 이상 급등 시 패스
+                if curr_price >= prev_price * 1.15: continue
+                
+                # 5. 거래량 3배 필터 (예상 거래량 기준) & 시가 갭 4% 미만
+                if proj_vol >= vol_ma20 * 3 and curr_price > prev_price:
                     if open_price < prev_price * 1.04:
                         if len(pf['holdings']) >= MAX_POSITIONS: break
                         
