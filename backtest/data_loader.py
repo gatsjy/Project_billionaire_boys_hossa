@@ -18,8 +18,10 @@ def get_theme_stocks():
         
     for file in os.listdir(theme_dir):
         if file.endswith('.csv'):
+            theme_name = file.replace('.csv', '').capitalize()
             df = pd.read_csv(os.path.join(theme_dir, file), dtype={'Code': str})
             df['Code'] = df['Code'].apply(lambda x: str(x).zfill(6))
+            df['Theme'] = theme_name
             all_stocks.append(df)
             
     if all_stocks:
