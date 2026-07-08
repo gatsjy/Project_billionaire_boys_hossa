@@ -7,6 +7,8 @@ import FinanceDataReader as fdr
 from notifier.email_sender import send_radar_alert
 from backtest.data_loader import get_theme_stocks
 from portfolio_manager import load_portfolio, save_portfolio
+from backtest.realistic import DEFAULT_COST
+from backtest.strategy import _atr
 
 HISTORY_FILE = 'alert_history.json'
 
@@ -35,6 +37,12 @@ def run_radar():
     
     pf = load_portfolio()
     
+    MAX_POSITIONS = 4
+    MAX_DAILY_LOSS = -3.0
+    
+    today_loss = sum(t.get('profit_pct', 0) for t in pf.get('trade_history', [])
+                     if t.get('sell_date') == today and t.get('profit_pct', 0) < 0)
+    
     # 0. 기존 보유 종목 실시간 익절/손절 감시
     surviving_holdings = []
     for h in pf['holdings']:
@@ -61,15 +69,20 @@ def run_radar():
                     reason = "손절 (-2%)"
                     sold = True
             else:
-                if curr_price >= buy_price * 1.07:
-                    reason = "익절 (+7%)"
+                # 개별 종목별 동적 설정 적용: TP 15%, SL은 진입 시 기록된 손절가 적용
+                # 구버전 호환성을 위해 h에 sl_price가 없으면 기본 -7% 적용
+                sl_price = h.get('sl_price', buy_price * 0.93)
+                tp_price = h.get('tp_price', buy_price * 1.15)
+                
+                if curr_price >= tp_price:
+                    reason = f"익절 (+{((tp_price-buy_price)/buy_price)*100:.0f}%)"
                     sold = True
-                elif curr_price <= buy_price * 0.98:
-                    reason = "손절 (-2%)"
+                elif curr_price <= sl_price:
+                    reason = f"손절 ({((sl_price-buy_price)/buy_price)*100:.0f}%)"
                     sold = True
                     
             if sold:
-                profit_pct = (curr_price - buy_price) / buy_price * 100
+                profit_pct = DEFAULT_COST.net_return(buy_price, curr_price) * 100
                 pf['cash'] += curr_price * qty
                 trade_record = {
                     "type": "sell",
@@ -158,6 +171,16 @@ def run_radar():
         print(f"매크로 인버스 스캔 에러: {e}")
 
     # 2. 테마주 슈팅 타점 스캔 (조선, 원전, 방산, 반도체, 로봇, 전력 등)
+    if today_loss <= MAX_DAILY_LOSS:
+        print(f"⚠️ 일일 손실 한도({today_loss:.2f}%) 도달. 금일 신규 매수 중단.")
+        save_portfolio(pf)
+        return
+
+    if len(pf['holdings']) >= MAX_POSITIONS:
+        print(f"⚠️ 최대 보유 종목 수({MAX_POSITIONS}개) 도달. 신규 매수 스캔 생략.")
+        save_portfolio(pf)
+        return
+
     theme_stocks = get_theme_stocks()
     if not theme_stocks.empty:
         for idx, row in theme_stocks.iterrows():
@@ -172,24 +195,49 @@ def run_radar():
                 if len(df) < 21: continue
                 
                 vol_ma20 = df['Volume'].iloc[-21:-1].mean()
+                ma20 = df['Close'].iloc[-21:-1].mean()
                 curr_vol = df['Volume'].iloc[-1]
-                curr_price = df['Close'].iloc[-1]
-                prev_price = df['Close'].iloc[-2]
+                curr_price = float(df['Close'].iloc[-1])
+                prev_price = float(df['Close'].iloc[-2])
                 
-                if curr_vol >= vol_ma20 and curr_price > prev_price:
+                # 추세 필터: 전일 종가가 20일선 위에 있을 때만
+                if prev_price < ma20: continue
+                
+                # 거래량 3배 필터
+                if curr_vol >= vol_ma20 * 3 and curr_price > prev_price:
                     open_price = df['Open'].iloc[-1]
                     if open_price < prev_price * 1.04:
-                        if pf['cash'] >= 500000 and not any(h['code'] == code for h in pf['holdings']):
-                            qty = int(500000 // curr_price)
+                        if len(pf['holdings']) >= MAX_POSITIONS: break
+                        
+                        # Half-Kelly 기반 사이징 근사 (자본의 10% 한도)
+                        invest_amount = min(pf['cash'] * 0.10, 500000)
+                        if invest_amount < 100000: continue
+                        
+                        if not any(h['code'] == code for h in pf['holdings']):
+                            qty = int(invest_amount // curr_price)
+                            if qty == 0: continue
+                            
                             pf['cash'] -= qty * curr_price
+                            
+                            # ATR 기반 동적 손절
+                            atr_series = _atr(df)
+                            curr_atr = float(atr_series.iloc[-1])
+                            atr_pct = curr_atr / curr_price
+                            
+                            # 기본 -7%와 -1.5*ATR 중 더 넓은(안전한) 쪽을 선택해 노이즈 손절 제거
+                            dynamic_sl_pct = min(-0.07, -1.5 * atr_pct)
+                            sl_price = curr_price * (1 + dynamic_sl_pct)
+                            tp_price = curr_price * 1.15
                             
                             buy_record = {
                                 "type": "buy",
                                 "code": code,
                                 "name": name,
                                 "buy_date": today,
-                                "buy_price": float(curr_price),
-                                "qty": qty
+                                "buy_price": curr_price,
+                                "qty": qty,
+                                "sl_price": sl_price,
+                                "tp_price": tp_price
                             }
                             pf['holdings'].append(buy_record)
                             pf['trade_history'].append(buy_record)
@@ -197,12 +245,12 @@ def run_radar():
                             subject = f"{name} 단기 슈팅 타점 가상 매수 체결"
                             msg = (
                                 f"*[테마 대장주 슈팅 포착 및 매수 완료]*\n"
-                                f"테마: {row.get('Theme', '수주산업')} / 장중 거래량 폭발\n\n"
+                                f"테마: {row.get('Theme', '수주산업')} / 거래량 3배+추세필터\n\n"
                                 f"종목: {name} ({code})\n"
                                 f"체결가: {curr_price:,}원\n"
                                 f"수량: {qty}주\n"
-                                f"목표 익절가: {int(curr_price * 1.07):,}원 (+7%)\n"
-                                f"손절가: {int(curr_price * 0.98):,}원 (-2%)"
+                                f"목표 익절가: {int(tp_price):,}원 (+15%)\n"
+                                f"손절가: {int(sl_price):,}원 ({dynamic_sl_pct*100:.1f}% / ATR기반)"
                             )
                             send_radar_alert(subject, msg)
                             alerted_today.append(code)

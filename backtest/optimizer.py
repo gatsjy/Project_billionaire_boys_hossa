@@ -108,7 +108,7 @@ def run_grid_search(start_date, end_date):
     results_df = pd.DataFrame(results).sort_values(by='Exp_OOS', ascending=False)
 
     print("\n" + "=" * 78)
-    print("파라미터 최적화 결과 — '표본외(OOS) 비용반영 기댓값' 순")
+    print("파라미터 최적화 결과 - '표본외(OOS) 비용반영 기댓값' 순")
     print("=" * 78)
     print(results_df.to_string(index=False))
     print("=" * 78)

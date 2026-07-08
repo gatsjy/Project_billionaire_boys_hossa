@@ -6,8 +6,8 @@ from datetime import datetime, timedelta
 from realistic import resolve_exit, bars_from_df, evaluate, DEFAULT_COST
 
 # 익절/손절/보유기간 (optimizer 의 표본외 검증을 통과한 값으로 갱신할 것)
-TP = 0.07
-SL = -0.03
+TP = 0.15
+SL = -0.07
 TIME_STOP_DAYS = 3
 
 

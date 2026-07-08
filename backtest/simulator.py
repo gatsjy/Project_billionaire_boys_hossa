@@ -13,8 +13,8 @@ from realistic import resolve_exit, bars_from_df, evaluate, DEFAULT_COST
 #     여기 기본값(+7/-3)은 예시일 뿐, optimizer 결과로 갱신할 것.
 # ---------------------------------------------------------------------------
 
-TP = 0.07
-SL = -0.03
+TP = 0.15
+SL = -0.07
 TIME_STOP_DAYS = 3
 
 
