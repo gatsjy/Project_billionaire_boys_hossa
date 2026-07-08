@@ -43,9 +43,8 @@ def run_radar():
     with open(lock_file, 'w') as f:
         f.write(str(os.getpid()))
         
-    try:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 1분 주기 타점 레이더 및 실시간 가상 매매 엔진 스캔 시작...")
-        today = datetime.today().strftime('%Y-%m-%d')
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 1분 주기 타점 레이더 및 실시간 가상 매매 엔진 스캔 시작...")
+    today = datetime.today().strftime('%Y-%m-%d')
     
     # 동적 유니버스 업데이트 (하루 1회)
     theme_dir = os.path.join(os.path.dirname(__file__), 'themes')
@@ -342,13 +341,12 @@ def run_radar():
     else:
         print("조건에 부합하는 타점(매수/매도)이 없습니다.")
 
-    finally:
-        # 실행 종료 시 락 파일 해제
-        if os.path.exists(lock_file):
-            try:
-                os.remove(lock_file)
-            except:
-                pass
+    # 실행 종료 시 락 파일 해제
+    if os.path.exists(lock_file):
+        try:
+            os.remove(lock_file)
+        except:
+            pass
 
 if __name__ == "__main__":
     run_radar()
