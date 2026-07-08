@@ -104,13 +104,24 @@ def run_radar():
             
     pf['holdings'] = surviving_holdings
 
-    # 1. KODEX 인버스 타점 스캔 (930원 ~ 950원)
+    # 1. 매크로 공포 점수(Fear Score) 기반 인버스 헷징 타점 스캔
     try:
-        inv_df = fdr.DataReader('114800')
-        if not inv_df.empty:
-            curr_inv_price = int(inv_df.iloc[-1]['Close'])
-            if 930 <= curr_inv_price <= 950:
-                if '114800' not in alerted_today:
+        from backtest.macro_indicators import get_macro_fear_score
+        
+        macro = get_macro_fear_score()
+        fear_score = macro['score']
+        
+        print(f"  [매크로 공포 점수] {fear_score}/4 - {macro['recommendation']}")
+        for detail in macro['details']:
+            print(f"    > {detail}")
+        
+        # Fear Score 2점 이상이면 인버스 매수 검토
+        if fear_score >= 2:
+            if '114800' not in alerted_today:
+                inv_df = fdr.DataReader('114800')
+                if not inv_df.empty:
+                    curr_inv_price = int(inv_df.iloc[-1]['Close'])
+                    
                     if pf['cash'] >= 500000 and not any(h['code'] == '114800' for h in pf['holdings']):
                         qty = int(500000 // curr_inv_price)
                         pf['cash'] -= qty * curr_inv_price
@@ -126,11 +137,15 @@ def run_radar():
                         pf['holdings'].append(buy_record)
                         pf['trade_history'].append(buy_record)
                         
-                        subject = "코스피 하방 헷징 인버스 가상 매수 체결"
+                        # 매크로 지표 상세 내역을 이메일에 포함
+                        macro_detail_str = "\n".join([f"  - {d}" for d in macro['details']])
+                        subject = f"[공포점수 {fear_score}/4] 코스피 하방 헷징 인버스 가상 매수 체결"
                         msg = (
-                            "*[긴급 하방 헷징 타점 포착 및 매수 완료]*\n"
-                            "코스피 데드캣 바운스 고점 도달 (인버스 매수 최적기)\n\n"
-                            "종목: KODEX 인버스 (114800)\n"
+                            f"*[매크로 공포 점수 기반 인버스 헷징 매수 완료]*\n"
+                            f"공포 점수(Fear Score): {fear_score}/4\n"
+                            f"판정: {macro['recommendation']}\n\n"
+                            f"[매크로 지표 상세]\n{macro_detail_str}\n\n"
+                            f"종목: KODEX 인버스 (114800)\n"
                             f"체결가: {curr_inv_price:,}원\n"
                             f"수량: {qty}주\n"
                             f"목표 익절가: {int(curr_inv_price * 1.05):,}원 (+5%)\n"
@@ -140,7 +155,7 @@ def run_radar():
                         alerted_today.append('114800')
                         new_alerts.append('114800')
     except Exception as e:
-        print(f"인버스 스캔 에러: {e}")
+        print(f"매크로 인버스 스캔 에러: {e}")
 
     # 2. 테마주 슈팅 타점 스캔 (조선, 원전, 방산, 반도체, 로봇, 전력 등)
     theme_stocks = get_theme_stocks()
