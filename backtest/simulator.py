@@ -1,151 +1,118 @@
 import pandas as pd
+import os
 from datetime import datetime, timedelta
 
 from strategy import apply_strategy_v1
-from data_loader import get_theme_stocks, get_daily_data
+from data_loader import get_daily_data
+from realistic import resolve_exit, bars_from_df, evaluate, DEFAULT_COST
 
-def run_simulation(theme_file, start_date, end_date):
+# ---------------------------------------------------------------------------
+# 테마 가상매매 시뮬레이션 (2026-07 개편)
+#   - realistic.resolve_exit 로 갭·비용 반영 (기존 정확체결 낙관편향 제거)
+#   - 파라미터는 optimizer 의 '표본외 검증'을 통과한 값을 쓰는 것을 전제로 한다.
+#     여기 기본값(+7/-3)은 예시일 뿐, optimizer 결과로 갱신할 것.
+# ---------------------------------------------------------------------------
+
+TP = 0.07
+SL = -0.03
+TIME_STOP_DAYS = 3
+
+
+def run_simulation(theme_file, start_date, end_date, cost=DEFAULT_COST):
     print(f"[{theme_file}] 테마 백테스트 시뮬레이션 가동 중...")
-    
-    all_theme_stocks = get_theme_stocks()
-    
-    import os
+
     theme_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'themes', theme_file)
     if not os.path.exists(theme_path):
         print(f"{theme_file} 테마 리스트가 없습니다.")
         return None
-        
+
     theme_stocks = pd.read_csv(theme_path, dtype={'Code': str})
     theme_stocks['Code'] = theme_stocks['Code'].apply(lambda x: str(x).zfill(6))
-        
-    tp = 0.15 # 익절 15%
-    sl = -0.01 # 손절 -1%
-    
+
     trades = []
-    
-    for idx, row in theme_stocks.iterrows():
-        code = row['Code']
-        name = row['Name']
+    for _, row in theme_stocks.iterrows():
+        code, name = row['Code'], row['Name']
         df = get_daily_data(code, start_date, end_date)
-        if not df.empty and len(df) >= 25:
-            df = apply_strategy_v1(df)
-            
-            buy_dates = df[df['Buy_Signal']].index
-            
-            for buy_date in buy_dates:
-                buy_price = df.loc[buy_date, 'Open']
-                if buy_price == 0: continue
-                
-                sell_price = 0
-                sell_date = None
-                profit_pct = 0
-                reason = ""
-                
-                future_df = df.loc[buy_date:].iloc[1:4] 
-                
-                sold = False
-                for f_date, f_row in future_df.iterrows():
-                    high = f_row['High']
-                    low = f_row['Low']
-                    
-                    if low <= buy_price * (1 + sl): 
-                        sell_price = buy_price * (1 + sl)
-                        profit_pct = sl * 100
-                        reason = "손절 (-1%)"
-                        sell_date = f_date
-                        sold = True
-                        break
-                    elif high >= buy_price * (1 + tp): 
-                        sell_price = buy_price * (1 + tp)
-                        profit_pct = tp * 100
-                        reason = "익절 (+15%)"
-                        sell_date = f_date
-                        sold = True
-                        break
-                
-                if not sold and not future_df.empty:
-                    sell_date = future_df.index[-1]
-                    sell_price = future_df.iloc[-1]['Close']
-                    profit_pct = (sell_price - buy_price) / buy_price * 100
-                    reason = "보유기간 3일 경과"
-                    
-                if sell_price > 0:
-                    trades.append({
-                        "theme": theme_file.replace('.csv', ''),
-                        "name": name,
-                        "buy_date": buy_date.strftime('%Y-%m-%d'),
-                        "sell_date": sell_date.strftime('%Y-%m-%d') if sell_date else "",
-                        "buy_price": int(buy_price),
-                        "sell_price": int(sell_price),
-                        "profit_pct": profit_pct,
-                        "reason": reason
-                    })
-                    
+        if df.empty or len(df) < 25:
+            continue
+        df = apply_strategy_v1(df)
+
+        for buy_date in df[df['Buy_Signal']].index:
+            entry = df.loc[buy_date, 'Open']
+            if entry == 0:
+                continue
+            future = bars_from_df(df, buy_date, TIME_STOP_DAYS)
+            r = resolve_exit(entry, future, TP, SL, cost)
+            if r is None:
+                continue
+            trades.append({
+                "theme": theme_file.replace('.csv', ''),
+                "name": name,
+                "buy_date": buy_date.strftime('%Y-%m-%d'),
+                "buy_price": int(entry),
+                "sell_price": int(r['exit_price']),
+                "gross_pct": round(r['gross_pct'], 2),
+                "net_pct": round(r['net_pct'], 2),   # ★ 비용반영 실현수익률
+                "reason": r['reason'],
+            })
     return trades
+
 
 if __name__ == "__main__":
     end_dt = datetime.today()
-    start_dt = end_dt - timedelta(days=365 * 3) # 과거 3년
-    
+    start_dt = end_dt - timedelta(days=365 * 3)
+
     themes = ['nuclear.csv', 'shipbuilding.csv', 'defense.csv']
     all_trades = []
-    
     for t in themes:
-        trades = run_simulation(t, start_dt.strftime('%Y-%m-%d'), end_dt.strftime('%Y-%m-%d'))
-        if trades:
-            all_trades.extend(trades)
-            
+        tr = run_simulation(t, start_dt.strftime('%Y-%m-%d'), end_dt.strftime('%Y-%m-%d'))
+        if tr:
+            all_trades.extend(tr)
+
     df_trades = pd.DataFrame(all_trades)
-    
-    if not df_trades.empty:
-        total_trades = len(df_trades)
-        win_trades = df_trades[df_trades['profit_pct'] > 0]
-        loss_trades = df_trades[df_trades['profit_pct'] <= 0]
-        
-        win_rate = len(win_trades) / total_trades * 100
-        avg_profit = win_trades['profit_pct'].mean() if not win_trades.empty else 0
-        avg_loss = loss_trades['profit_pct'].mean() if not loss_trades.empty else 0
-        expected_value = (win_rate/100 * avg_profit) + ((1 - win_rate/100) * avg_loss)
-        
-        # 테마별 승률
-        theme_stats = []
-        for theme in themes:
-            theme_name = theme.replace('.csv', '')
-            t_df = df_trades[df_trades['theme'] == theme_name]
-            if not t_df.empty:
-                t_win = len(t_df[t_df['profit_pct'] > 0])
-                t_total = len(t_df)
-                t_win_rate = t_win / t_total * 100
-                t_return = t_df['profit_pct'].sum()
-                theme_stats.append(f"- **{theme_name.upper()}**: 총 {t_total}회 매매, 승률 {t_win_rate:.1f}%, 누적 수익 {t_return:.1f}%")
-        
-        with open('../expected_profit_loss_log.md', 'w', encoding='utf-8') as f:
-            f.write("# 📊 4대 주도 테마 가상 매매 예상 수익/손실 시뮬레이션 로그\n\n")
-            f.write(f"- **시뮬레이션 기준:** 과거 3년간의 실제 데이터 (최적 파라미터 적용: 익절 15%, 손절 1%)\n")
-            f.write(f"- **테스트 테마:** 원전, 피지컬 AI, 반도체, 조선\n\n")
-            
-            f.write("## 🏆 종합 예상 지표 (Expected Metrics)\n")
-            f.write(f"- **연평균 예상 매매 횟수:** 약 {int(total_trades/3)}회 (전체 {total_trades}회)\n")
-            f.write(f"- **예상 승률 (Win Rate):** {win_rate:.2f}%\n")
-            f.write(f"- **평균 수익 (Avg Profit):** +{avg_profit:.2f}%\n")
-            f.write(f"- **평균 손실 (Avg Loss):** {avg_loss:.2f}%\n")
-            f.write(f"- **1회 매매당 기댓값 (Expectancy):** **{expected_value:.2f}%**\n\n")
-            
-            f.write("## 🔥 테마별 승률 분석\n")
-            for ts in theme_stats:
-                f.write(ts + "\n")
-                
-            f.write("\n## 📝 최근 10건의 가상 매매 시뮬레이션 샘플\n")
-            f.write("| 테마 | 종목 | 매수일 | 매도가 | 수익률 | 사유 |\n")
-            f.write("|---|---|---|---|---|---|\n")
-            
-            recent_trades = df_trades.sort_values(by='buy_date', ascending=False).head(10)
-            for idx, r in recent_trades.iterrows():
-                f.write(f"| {r['theme']} | {r['name']} | {r['buy_date']} | {r['sell_price']:,}원 | **{r['profit_pct']:.2f}%** | {r['reason']} |\n")
-                
-            f.write("\n> 💡 **여의도 전문가 코멘트:**\n")
-            f.write("> 가장 승률 기댓값이 높았던 **원전(Nuclear)** 및 **피지컬 AI(Physical AI)** 테마가 역시나 압도적인 누적 수익을 견인하고 있습니다. 비록 손절(-1%)이 잦아 체감 승률은 낮아 보일 수 있으나, 한 번 슈팅이 나올 때마다 +15%씩 누적해 나가는 이른바 '포트폴리오 우상향'의 정석을 보여주고 있습니다. 이 기댓값을 믿고 흔들림 없이 매매를 지속하는 것이 핵심입니다.\n")
-            
-        print("시뮬레이션 완료. expected_profit_loss_log.md 파일이 생성되었습니다.")
-    else:
+    if df_trades.empty:
         print("매매 내역이 없습니다.")
+        raise SystemExit
+
+    df_trades = df_trades.sort_values(by='buy_date')
+    m = evaluate(df_trades['net_pct'].tolist())   # 비용반영 지표
+
+    # 테마별(비용반영)
+    theme_stats = []
+    for theme in [t.replace('.csv', '') for t in themes]:
+        t_df = df_trades[df_trades['theme'] == theme]
+        if not t_df.empty:
+            tm = evaluate(t_df['net_pct'].tolist())
+            theme_stats.append(
+                f"- **{theme.upper()}**: {tm['trades']}회, 승률 {tm['win_rate']}%, "
+                f"복리누적 {tm['total_return']}%, MDD {tm['max_drawdown']}%")
+
+    with open('../expected_profit_loss_log.md', 'w', encoding='utf-8') as f:
+        f.write("# 📊 테마 가상매매 시뮬레이션 로그 (비용·갭 반영)\n\n")
+        f.write(f"- **기준:** 과거 3년 실제 데이터 · 익절 +{TP*100:.0f}% / 손절 {SL*100:.0f}%\n")
+        f.write(f"- **비용:** 왕복 약 {DEFAULT_COST.round_trip_drag()*100:.2f}% 반영 "
+                "(수수료+거래세+슬리피지), 갭 체결 반영\n\n")
+        f.write("## 🏆 종합 지표 (비용반영)\n")
+        f.write(f"- **총 매매 횟수:** {m['trades']}회 (연 약 {int(m['trades']/3)}회)\n")
+        f.write(f"- **승률:** {m['win_rate']}%\n")
+        f.write(f"- **평균 수익 / 손실:** +{m['avg_win']}% / {m['avg_loss']}%\n")
+        f.write(f"- **1회 기댓값(비용반영):** **{m['expectancy']}%**\n")
+        f.write(f"- **복리 누적수익:** {m['total_return']}%\n")
+        f.write(f"- **최대낙폭(MDD):** {m['max_drawdown']}%\n")
+        f.write(f"- **최대 연속손실:** {m['max_losing_streak']}회\n")
+        f.write(f"- **Profit Factor:** {m['profit_factor']}\n\n")
+        f.write("## 🔥 테마별\n")
+        for ts in theme_stats:
+            f.write(ts + "\n")
+        f.write("\n## 📝 최근 10건 (gross=체결수익, net=비용반영)\n")
+        f.write("| 테마 | 종목 | 매수일 | 매도가 | gross | net | 사유 |\n|---|---|---|---|---|---|---|\n")
+        for _, r in df_trades.sort_values(by='buy_date', ascending=False).head(10).iterrows():
+            f.write(f"| {r['theme']} | {r['name']} | {r['buy_date']} | {r['sell_price']:,}원 | "
+                    f"{r['gross_pct']:.2f}% | **{r['net_pct']:.2f}%** | {r['reason']} |\n")
+        f.write("\n> 💡 **정직한 코멘트:** 이 수치는 갭 체결과 거래비용을 모두 반영한 값이다. "
+                "기댓값이 양수이고 IS/OOS가 비슷할 때만 실전을 검토한다. "
+                "MDD와 연속손실은 '실제로 견뎌야 하는 고통'이며 파라미터 채택의 필수 판단 기준이다.\n")
+
+    print("시뮬레이션 완료. expected_profit_loss_log.md 생성됨.")
+    print(f"  기댓값(비용반영) {m['expectancy']}%/매매 | 복리누적 {m['total_return']}% | "
+          f"MDD {m['max_drawdown']}% | PF {m['profit_factor']}")
