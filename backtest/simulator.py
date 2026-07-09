@@ -5,17 +5,13 @@ from datetime import datetime, timedelta
 from strategy import apply_strategy_v1
 from data_loader import get_daily_data
 from realistic import resolve_exit, bars_from_df, evaluate, DEFAULT_COST
+from params import THEME_TP as TP, THEME_SL as SL, TIME_STOP_DAYS
 
 # ---------------------------------------------------------------------------
 # 테마 가상매매 시뮬레이션 (2026-07 개편)
 #   - realistic.resolve_exit 로 갭·비용 반영 (기존 정확체결 낙관편향 제거)
-#   - 파라미터는 optimizer 의 '표본외 검증'을 통과한 값을 쓰는 것을 전제로 한다.
-#     여기 기본값(+7/-3)은 예시일 뿐, optimizer 결과로 갱신할 것.
+#   - 파라미터는 params.py 단일소스 사용(실행부 radar_alert 와 동일 값 보장)
 # ---------------------------------------------------------------------------
-
-TP = 0.07
-SL = -0.03
-TIME_STOP_DAYS = 3
 
 
 def run_simulation(theme_file, start_date, end_date, cost=DEFAULT_COST):
