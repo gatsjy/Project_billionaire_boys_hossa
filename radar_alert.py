@@ -1,8 +1,11 @@
 import os
+import sys
 import json
 import pandas as pd
 from datetime import datetime
 import FinanceDataReader as fdr
+
+sys.stdout.reconfigure(encoding='utf-8')
 
 from notifier.email_sender import send_radar_alert
 from backtest.data_loader import get_theme_stocks
@@ -280,8 +283,16 @@ def run_radar():
                 now_time = datetime.now()
                 market_open = now_time.replace(hour=9, minute=0, second=0, microsecond=0)
                 elapsed_minutes = (now_time - market_open).total_seconds() / 60.0
+                
+                # [시간 필터] 개장 후 30분(09:30) 이전에는 뇌동매매 방지를 위해 컷오프
+                if elapsed_minutes < 30: continue
+                
                 elapsed_minutes = max(1, min(elapsed_minutes, 390)) # 09:00~15:30 (390분)
                 proj_vol = curr_vol * (390 / elapsed_minutes)
+                
+                # [절대 대금 필터] 현재 실제 체결된 거래대금이 100억 미만이면 잡주로 간주하여 패스
+                trading_value = curr_price * curr_vol
+                if trading_value < 10000000000: continue
                 
                 # 2. 추세 필터: 전일 종가가 20일선 위에 있을 때만
                 if prev_price < ma20: continue
@@ -333,8 +344,10 @@ def run_radar():
                             subject = f"{name} 단기 슈팅 타점 가상 매수 체결"
                             msg = (
                                 f"*[테마 대장주 슈팅 포착 및 매수 완료]*\n"
-                                f"테마: {row.get('Theme', '수주산업')} / 거래량 3배+추세필터\n\n"
+                                f"테마: {row.get('Theme', '수주산업')} / 거래대금 100억+ & 추세필터\n\n"
                                 f"종목: {name} ({code})\n"
+                                f"돌파 시각: {now_time.strftime('%H:%M:%S')}\n"
+                                f"현재 거래대금: {int(trading_value // 100000000):,}억 원\n"
                                 f"체결가: {curr_price:,}원\n"
                                 f"수량: {qty}주\n"
                                 f"목표 익절가: {int(tp_price):,}원 (+15%)\n"
