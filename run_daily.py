@@ -83,8 +83,16 @@ def run_daily_eod_tasks():
                 "buy_price": buy_price,
                 "sell_price": float(today_close),
                 "profit_pct": profit_pct,
-                "reason": "보유기간 3일 경과 (EOD 타임스탑)"
+                "reason": "보유기간 3일 경과 (EOD 타임스탑)",
+                "theme": h.get("theme", ""),
+                "trading_value_100m": h.get("trading_value_100m", 0),
+                "buy_time": h.get("buy_time", "")
             }
+            
+            if profit_pct < 0:
+                from portfolio_manager import log_false_signal
+                log_false_signal(trade_record)
+                
             pf['trade_history'].append(trade_record)
             today_trades.append(trade_record)
             print(f"[{h['name']}] 타임스탑 강제 청산 (종가: {today_close}원)")

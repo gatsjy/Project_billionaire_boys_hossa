@@ -128,9 +128,17 @@ def run_radar():
                     "buy_price": buy_price,
                     "sell_price": curr_price,
                     "profit_pct": profit_pct,
-                    "reason": reason
+                    "reason": reason,
+                    "theme": h.get("theme", ""),
+                    "trading_value_100m": h.get("trading_value_100m", 0),
+                    "buy_time": h.get("buy_time", "")
                 }
                 pf['trade_history'].append(trade_record)
+                
+                # 손절(헛방)인 경우 로거에 저장
+                if profit_pct < 0:
+                    from portfolio_manager import log_false_signal
+                    log_false_signal(trade_record)
                 
                 subject = f"[{reason}] {h['name']} 실시간 매도 체결"
                 msg = (
@@ -336,7 +344,10 @@ def run_radar():
                                 "buy_price": curr_price,
                                 "qty": qty,
                                 "sl_price": sl_price,
-                                "tp_price": tp_price
+                                "tp_price": tp_price,
+                                "theme": row.get('Theme', '수주산업'),
+                                "trading_value_100m": int(trading_value // 100000000),
+                                "buy_time": now_time.strftime('%H:%M:%S')
                             }
                             pf['holdings'].append(buy_record)
                             pf['trade_history'].append(buy_record)
