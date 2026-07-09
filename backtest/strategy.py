@@ -1,5 +1,12 @@
 import pandas as pd
 
+# 파라미터 단일소스. 백테스트 디렉터리 안(from params)과 패키지 임포트(from backtest.params)
+# 두 컨텍스트 모두에서 동작하도록 이중 임포트.
+try:
+    from params import VOLUME_SPIKE_MULT, GAP_MIN, GAP_MAX
+except ImportError:
+    from backtest.params import VOLUME_SPIKE_MULT, GAP_MIN, GAP_MAX
+
 
 def _atr(df, period=14):
     """ATR(평균 실질 변동폭). 변동성 기반 손절/포지션 사이징의 근거."""
@@ -39,15 +46,15 @@ def apply_strategy_v1(df, use_trend_filter=True):
     df['ATR'] = _atr(df, 14)
     df['ATR_Pct'] = df['ATR'] / df['Close'] * 100   # 변동성(%) — 손절폭 산정 근거
 
-    # 1. 거래량 급등: 전일 거래량이 (전일 기준) 20일 평균의 3배 이상
+    # 1. 거래량 급등: 전일 거래량이 (전일 기준) 20일 평균의 N배 이상 (params.VOLUME_SPIKE_MULT)
     df['Prev_Volume'] = df['Volume'].shift(1)
     df['Prev_Volume_MA20'] = df['Volume_MA20'].shift(1)
-    df['Volume_Spike'] = df['Prev_Volume'] >= (df['Prev_Volume_MA20'] * 3)
+    df['Volume_Spike'] = df['Prev_Volume'] >= (df['Prev_Volume_MA20'] * VOLUME_SPIKE_MULT)
 
-    # 2. 갭 필터: 오늘 시가 vs 어제 종가가 -2% ~ +5% (추격/이탈 방지)
+    # 2. 갭 필터: 오늘 시가 vs 어제 종가가 GAP_MIN ~ GAP_MAX (추격/이탈 방지)
     df['Prev_Close'] = df['Close'].shift(1)
     df['Gap_Pct'] = (df['Open'] - df['Prev_Close']) / df['Prev_Close'] * 100
-    df['Gap_Filter'] = (df['Gap_Pct'] >= -2) & (df['Gap_Pct'] <= 5)
+    df['Gap_Filter'] = (df['Gap_Pct'] >= GAP_MIN) & (df['Gap_Pct'] <= GAP_MAX)
 
     # 3. 추세 필터(신설): 전일 종가가 20일선 위 = 상승/눌림 구간에서만 진입
     if use_trend_filter:

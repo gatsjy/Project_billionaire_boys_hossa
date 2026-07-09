@@ -4,11 +4,7 @@ from data_loader import get_kosdaq_list, get_daily_data
 from datetime import datetime, timedelta
 
 from realistic import resolve_exit, bars_from_df, evaluate, DEFAULT_COST
-
-# 익절/손절/보유기간 (optimizer 의 표본외 검증을 통과한 값으로 갱신할 것)
-TP = 0.15
-SL = -0.07
-TIME_STOP_DAYS = 3
+from params import THEME_TP as TP, THEME_SL as SL, TIME_STOP_DAYS
 
 
 def run_backtest(start_date, end_date, cost=DEFAULT_COST):

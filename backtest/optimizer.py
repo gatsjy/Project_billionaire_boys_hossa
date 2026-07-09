@@ -5,6 +5,7 @@ import itertools
 from strategy import apply_strategy_v1
 from data_loader import get_theme_stocks, get_daily_data
 from realistic import resolve_exit, bars_from_df, evaluate, DEFAULT_COST
+from params import TIME_STOP_DAYS as _TS
 
 # ---------------------------------------------------------------------------
 # 과최적화 방지 개편 (2026-07)
@@ -22,7 +23,7 @@ from realistic import resolve_exit, bars_from_df, evaluate, DEFAULT_COST
 #   - MDD·연속손실·Profit Factor 를 함께 보고해 과최적 파라미터를 걸러냄
 # ---------------------------------------------------------------------------
 
-TIME_STOP_DAYS = 3
+TIME_STOP_DAYS = _TS
 
 
 def collect_signals(stock_data):

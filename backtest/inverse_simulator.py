@@ -3,6 +3,10 @@ from datetime import datetime, timedelta
 import FinanceDataReader as fdr
 
 from index_strategy import apply_inverse_strategy
+from realistic import resolve_exit, evaluate, DEFAULT_COST
+from params import INVERSE_TP, INVERSE_SL
+
+INVERSE_HOLD_DAYS = 20  # 인버스는 스윙성이라 보유상한을 길게
 
 def run_inverse_simulation(start_date, end_date):
     print("KOSPI 지수 및 KODEX 인버스 시뮬레이션 가동 중...")
@@ -18,72 +22,40 @@ def run_inverse_simulation(start_date, end_date):
         
     kospi_df = apply_inverse_strategy(kospi_df)
     buy_dates = kospi_df[kospi_df['Inverse_Buy_Signal']].index
-    
-    tp = 0.05 # 인버스는 변동성이 적으므로 익절 5% (지수 5% 하락)
-    sl = -0.02 # 손절 2%
-    
+
+    tp, sl = INVERSE_TP, INVERSE_SL  # params 단일소스
+
     trades = []
-    
-    # 여러 시그널이 겹칠 수 있으므로, 이미 포지션이 있으면 패스
-    in_position = False
-    
+    last_exit = None  # 직전 청산일 — 이후에만 재진입(포지션 중복 방지)
+
     for buy_date in buy_dates:
-        if in_position: continue
-        
-        if buy_date not in inverse_df.index: continue
-        
+        if last_exit is not None and buy_date <= last_exit:
+            continue
+        if buy_date not in inverse_df.index:
+            continue
         buy_price = inverse_df.loc[buy_date, 'Open']
-        if buy_price == 0: continue
-        
-        sell_price = 0
-        sell_date = None
-        profit_pct = 0
-        reason = ""
-        
-        future_df = inverse_df.loc[buy_date:].iloc[1:20] # 최대 20일 보유
-        
-        sold = False
-        in_position = True
-        
-        for f_date, f_row in future_df.iterrows():
-            high = f_row['High']
-            low = f_row['Low']
-            
-            if low <= buy_price * (1 + sl): 
-                sell_price = buy_price * (1 + sl)
-                profit_pct = sl * 100
-                reason = "손절 (-2%) - 시장 반등"
-                sell_date = f_date
-                sold = True
-                break
-            elif high >= buy_price * (1 + tp): 
-                sell_price = buy_price * (1 + tp)
-                profit_pct = tp * 100
-                reason = "익절 (+5%) - 급락장 적중"
-                sell_date = f_date
-                sold = True
-                break
-        
-        if not sold and not future_df.empty:
-            sell_date = future_df.index[-1]
-            sell_price = future_df.iloc[-1]['Close']
-            profit_pct = (sell_price - buy_price) / buy_price * 100
-            reason = "보유기간(20일) 경과 - 횡보"
-            
-        if sell_price > 0:
-            trades.append({
-                "theme": "KOSPI HEDGE",
-                "name": "KODEX 인버스",
-                "buy_date": buy_date.strftime('%Y-%m-%d'),
-                "sell_date": sell_date.strftime('%Y-%m-%d') if sell_date else "",
-                "buy_price": int(buy_price),
-                "sell_price": int(sell_price),
-                "profit_pct": profit_pct,
-                "reason": reason
-            })
-        
-        in_position = False
-            
+        if buy_price == 0:
+            continue
+
+        window = inverse_df.loc[buy_date:].iloc[1:1 + INVERSE_HOLD_DAYS]
+        future = [{"Open": r.Open, "High": r.High, "Low": r.Low, "Close": r.Close}
+                  for r in window.itertuples()]
+        # ★ 갭·비용 반영 체결 (기존 low<=stop→정확히 -2% 낙관편향 제거)
+        r = resolve_exit(buy_price, future, tp, sl, DEFAULT_COST)
+        if r is None:
+            continue
+        if len(window) > 0:
+            last_exit = window.index[min(r['holding_days'] - 1, len(window) - 1)]
+        trades.append({
+            "theme": "KOSPI HEDGE",
+            "name": "KODEX 인버스",
+            "buy_date": buy_date.strftime('%Y-%m-%d'),
+            "buy_price": int(buy_price),
+            "sell_price": int(r['exit_price']),
+            "profit_pct": r['net_pct'],   # 비용반영 실현손익
+            "reason": r['reason'],
+        })
+
     return trades
 
 if __name__ == "__main__":
