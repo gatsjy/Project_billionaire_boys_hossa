@@ -1,46 +1,16 @@
 {
   "initial_capital": 2000000,
-  "cash": 1250805.0,
+  "cash": 1601556.0,
   "holdings": [
-    {
-      "type": "buy",
-      "code": "024060",
-      "name": "흥구석유",
-      "buy_date": "2026-07-09",
-      "buy_price": 10740.0,
-      "qty": 14,
-      "sl_price": 9814.285714285714,
-      "tp_price": 12350.999999999998
-    },
-    {
-      "type": "buy",
-      "code": "005860",
-      "name": "한일사료",
-      "buy_date": "2026-07-09",
-      "buy_price": 2395.0,
-      "qty": 60,
-      "sl_price": 2208.035714285714,
-      "tp_price": 2754.25
-    },
-    {
-      "type": "buy",
-      "code": "117580",
-      "name": "대성에너지",
-      "buy_date": "2026-07-09",
-      "buy_price": 6950.0,
-      "qty": 18,
-      "sl_price": 6463.5,
-      "tp_price": 7992.499999999999
-    },
     {
       "type": "buy",
       "code": "114800",
       "name": "KODEX 인버스",
       "buy_date": "2026-07-09",
-      "buy_price": 1005.0,
-      "qty": 311,
-      "sl_price": 984.9,
-      "tp_price": 1055.25
+      "buy_price": 1024.0,
+      "qty": 390,
+      "sl_price": 1003.52,
+      "tp_price": 1075.2
     }
   ],
   "trade_history": [
@@ -104,6 +74,96 @@
       "qty": 311,
       "sl_price": 984.9,
       "tp_price": 1055.25
+    },
+    {
+      "type": "sell",
+      "code": "024060",
+      "name": "흥구석유",
+      "buy_date": "2026-07-09",
+      "sell_date": "2026-07-09",
+      "buy_price": 10740.0,
+      "sell_price": 11000.0,
+      "profit_pct": 2.4208566108007448,
+      "reason": "수동 전량 매도 (수익 실현/포지션 정리)",
+      "theme": "",
+      "trading_value_100m": 0,
+      "buy_time": ""
+    },
+    {
+      "type": "sell",
+      "code": "005860",
+      "name": "한일사료",
+      "buy_date": "2026-07-09",
+      "sell_date": "2026-07-09",
+      "buy_price": 2395.0,
+      "sell_price": 2470.0,
+      "profit_pct": 3.1315240083507305,
+      "reason": "수동 전량 매도 (수익 실현/포지션 정리)",
+      "theme": "",
+      "trading_value_100m": 0,
+      "buy_time": ""
+    },
+    {
+      "type": "sell",
+      "code": "117580",
+      "name": "대성에너지",
+      "buy_date": "2026-07-09",
+      "sell_date": "2026-07-09",
+      "buy_price": 6950.0,
+      "sell_price": 7160.0,
+      "profit_pct": 3.0215827338129495,
+      "reason": "수동 전량 매도 (수익 실현/포지션 정리)",
+      "theme": "",
+      "trading_value_100m": 0,
+      "buy_time": ""
+    },
+    {
+      "type": "sell",
+      "code": "114800",
+      "name": "KODEX 인버스",
+      "buy_date": "2026-07-09",
+      "sell_date": "2026-07-09",
+      "buy_price": 1005.0,
+      "sell_price": 1017.0,
+      "profit_pct": 1.1940298507462688,
+      "reason": "수동 전량 매도 (수익 실현/포지션 정리)",
+      "theme": "",
+      "trading_value_100m": 0,
+      "buy_time": ""
+    },
+    {
+      "type": "buy",
+      "code": "114800",
+      "name": "KODEX 인버스",
+      "buy_date": "2026-07-09",
+      "buy_price": 1017.0,
+      "qty": 392,
+      "sl_price": 996.66,
+      "tp_price": 1067.8500000000001
+    },
+    {
+      "type": "sell",
+      "code": "114800",
+      "name": "KODEX 인버스",
+      "buy_date": "2026-07-09",
+      "sell_date": "2026-07-09",
+      "buy_price": 1017.0,
+      "sell_price": 1024.0,
+      "profit_pct": 0.688298918387414,
+      "reason": "수동 전량 매도 (수익 실현/포지션 정리)",
+      "theme": "",
+      "trading_value_100m": 0,
+      "buy_time": ""
+    },
+    {
+      "type": "buy",
+      "code": "114800",
+      "name": "KODEX 인버스",
+      "buy_date": "2026-07-09",
+      "buy_price": 1024.0,
+      "qty": 390,
+      "sl_price": 1003.52,
+      "tp_price": 1075.2
     }
   ]
 }

@@ -15,23 +15,7 @@ from backtest.strategy import _atr
 from backtest.index_strategy import calculate_rsi
 from universe_updater import update_dynamic_universe
 
-HISTORY_FILE = 'alert_history.json'
 
-def load_alert_history():
-    if os.path.exists(HISTORY_FILE):
-        with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            if data.get("date") == datetime.today().strftime('%Y-%m-%d'):
-                return data.get("alerts", [])
-    return []
-
-def save_alert_history(alerts):
-    with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
-        json_data = {
-            "date": datetime.today().strftime('%Y-%m-%d'),
-            "alerts": alerts
-        }
-        json.dump(json_data, f, indent=4)
 
 def run_radar():
     import tempfile
@@ -67,10 +51,13 @@ def run_radar():
         print("감시할 동적 유니버스 종목이 없습니다. 종료합니다.")
         return
         
-    alerted_today = load_alert_history()
-    new_alerts = []
-    
     pf = load_portfolio()
+    
+    alerted_today = list(set(
+        [t['code'] for t in pf.get('trade_history', []) if t.get('buy_date') == today and t.get('type') == 'buy'] + 
+        [h['code'] for h in pf.get('holdings', []) if h.get('buy_date') == today]
+    ))
+    new_alerts_count = 0
     
     MAX_POSITIONS = 4
     MAX_DAILY_LOSS = -3.0
@@ -250,9 +237,10 @@ def run_radar():
                             f"목표 익절가: {int(curr_inv_price * 1.05):,}원 (+5%)\n"
                             f"손절가: {int(curr_inv_price * 0.98):,}원 (-2%)"
                         )
+                        save_portfolio(pf) # Transaction Commit 먼저
                         send_radar_alert(subject, msg)
                         alerted_today.append('114800')
-                        new_alerts.append('114800')
+                        new_alerts_count += 1
     except Exception as e:
         print(f"매크로 인버스 스캔 에러: {e}")
 
@@ -364,17 +352,17 @@ def run_radar():
                                 f"목표 익절가: {int(tp_price):,}원 (+15%)\n"
                                 f"손절가: {int(sl_price):,}원 ({dynamic_sl_pct*100:.1f}% / ATR기반)"
                             )
+                            save_portfolio(pf) # Transaction Commit 먼저
                             send_radar_alert(subject, msg)
                             alerted_today.append(code)
-                            new_alerts.append(code)
+                            new_alerts_count += 1
             except Exception as e:
                 print(f"{name} 스캔 에러: {e}")
                 
     save_portfolio(pf)
     
-    if new_alerts:
-        save_alert_history(alerted_today)
-        print(f"새로운 매수 체결 알림 {len(new_alerts)}건 발송 완료.")
+    if new_alerts_count > 0:
+        print(f"새로운 매수 체결 알림 {new_alerts_count}건 발송 완료.")
     else:
         print("조건에 부합하는 타점(매수/매도)이 없습니다.")
 

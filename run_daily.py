@@ -47,9 +47,16 @@ def generate_markdown_report(today, pf, daily_trades, total_value):
 
 def run_daily_eod_tasks():
     today = datetime.today().strftime('%Y-%m-%d')
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 장 마감 EOD 결산 작업 시작")
     
     pf = load_portfolio()
+    
+    # 일일 실행 잠금 (Daily Lock)
+    if pf.get('last_eod_date') == today:
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 오늘({today}) 장 마감 EOD 결산 작업이 이미 완료되었습니다. 중복 실행을 방지합니다.")
+        return
+        
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 장 마감 EOD 결산 작업 시작")
+    
     end_dt = datetime.today()
     start_dt = end_dt - timedelta(days=20)
     
@@ -128,6 +135,10 @@ def run_daily_eod_tasks():
         
     # 데일리 리포트 이메일 발송
     send_radar_alert(f"[가상매매 일지] {today} 결산 리포트", md_content)
+    
+    pf['last_eod_date'] = today
+    save_portfolio(pf)
+    
     print(f"가상 매매 EOD 결산 종료. 매매 일지 생성 및 이메일 발송 완료: {log_filename}")
 
 if __name__ == "__main__":
