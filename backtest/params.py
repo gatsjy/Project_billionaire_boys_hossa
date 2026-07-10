@@ -35,8 +35,19 @@ REV_HOLD_DAYS = 10           # 영업일 타임아웃
 # --- 지수 추세추종 코어 (Phase 14: 라이브 메인 전략) ---
 # 개별주 단타/스윙이 모두 지수에 패배(Phase 9~13) → 검증된 유일 방향인 지수 추세보유를 코어로.
 # 200일선 ±2% 히스테리시스 밴드. 상승추세 100% / 하락추세 20%로 약세장 방어.
-INDEX_CODE = '069500'        # KODEX 200 (레버리지 원하면 122630)
-INDEX_NAME = 'KODEX 200'
+# 코어 상품 선택: False=KODEX 200(방어적) / True=KODEX 레버리지(수익↑·리스크↑)
+#   [검증치 kr_trend_research, 하락시20% 규칙]
+#     KODEX 200  : 검증 CAGR 26.4% / MDD -24.9% / Calmar 1.06
+#     KODEX 레버리지: 검증 CAGR 41.2% / MDD -42.4% / Calmar 0.97
+#   → 레버리지는 수익은 크나 낙폭·변동성감쇠가 커 '효율(Calmar)'은 오히려 낮다.
+#     추세 초입(이격도 낮을 때)에만 의미 있고, 현재처럼 이격도 +49~76%인 확장 구간엔 부적합.
+INDEX_USE_LEVERAGE = False
+if INDEX_USE_LEVERAGE:
+    INDEX_CODE = '122630'
+    INDEX_NAME = 'KODEX 레버리지'
+else:
+    INDEX_CODE = '069500'
+    INDEX_NAME = 'KODEX 200'
 INDEX_BAND = 0.02            # 200일선 ±2% 밴드(휩쏘 방지)
 INDEX_W_ON = 1.0             # 상승추세 목표 비중
 INDEX_W_OFF = 0.2            # 하락추세 목표 비중(현금 방어)
