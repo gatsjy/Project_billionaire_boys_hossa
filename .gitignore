@@ -4,3 +4,7 @@ alert_history.json
 
 # 연구용 가격 캐시 (재생성 가능)
 backtest/_cache_prices.pkl
+
+# 지수 코어 봇 런타임 장부/락 (봇이 매 실행 시 생성)
+portfolio_index.json
+portfolio_index.lock

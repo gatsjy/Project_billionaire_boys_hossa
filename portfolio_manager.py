@@ -23,12 +23,13 @@ DEFAULT_PF = {
 
 
 @contextlib.contextmanager
-def portfolio_lock():
+def portfolio_lock(lock_file=LOCK_FILE):
     """
-    장부(portfolio.json)에 대한 배타적 락.
+    장부에 대한 배타적 락.
 
     레이더 데몬(1분 주기)과 EOD 결산(run_daily)이 같은 파일을 동시에
     read-modify-write 하면 매매기록/현금이 유실된다. 이 락으로 임계구역을 보호한다.
+    별도 장부(예: 지수 코어 봇)를 쓰는 경우 lock_file 을 달리 지정해 독립 락을 얻는다.
 
     사용:
         with portfolio_lock():
@@ -40,7 +41,7 @@ def portfolio_lock():
         # 윈도우: 락 파일 존재 여부로 간이 상호배제(폴링)
         for _ in range(300):  # 최대 ~30초 대기
             try:
-                fd = os.open(LOCK_FILE, os.O_CREAT | os.O_EXCL | os.O_RDWR)
+                fd = os.open(lock_file, os.O_CREAT | os.O_EXCL | os.O_RDWR)
                 os.close(fd)
                 break
             except FileExistsError:
@@ -49,12 +50,12 @@ def portfolio_lock():
             yield
         finally:
             try:
-                os.remove(LOCK_FILE)
+                os.remove(lock_file)
             except OSError:
                 pass
         return
 
-    f = open(LOCK_FILE, 'w')
+    f = open(lock_file, 'w')
     try:
         fcntl.flock(f, fcntl.LOCK_EX)
         yield
@@ -63,21 +64,21 @@ def portfolio_lock():
         f.close()
 
 
-def load_portfolio():
-    if os.path.exists(PORTFOLIO_FILE):
-        with open(PORTFOLIO_FILE, 'r', encoding='utf-8') as f:
+def load_portfolio(path=PORTFOLIO_FILE):
+    if os.path.exists(path):
+        with open(path, 'r', encoding='utf-8') as f:
             return json.load(f)
     return json.loads(json.dumps(DEFAULT_PF))  # 깊은 복사본
 
 
-def save_portfolio(pf):
+def save_portfolio(pf, path=PORTFOLIO_FILE):
     """원자적 저장: 임시파일에 쓴 뒤 os.replace 로 교체(중간 크래시에도 장부 안 깨짐)."""
-    target_dir = os.path.dirname(os.path.abspath(PORTFOLIO_FILE)) or '.'
+    target_dir = os.path.dirname(os.path.abspath(path)) or '.'
     fd, tmp = tempfile.mkstemp(dir=target_dir, suffix='.tmp')
     try:
         with os.fdopen(fd, 'w', encoding='utf-8') as f:
             json.dump(pf, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, PORTFOLIO_FILE)
+        os.replace(tmp, path)
     except Exception:
         if os.path.exists(tmp):
             os.remove(tmp)

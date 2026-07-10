@@ -32,6 +32,18 @@ REV_SL = -0.05               # 손절 하한 (실제는 max(5%, 1.5×ATR)로 노
 REV_ATR_K = 1.5              # ATR 기반 손절 배수
 REV_HOLD_DAYS = 10           # 영업일 타임아웃
 
+# --- 지수 추세추종 코어 (Phase 14: 라이브 메인 전략) ---
+# 개별주 단타/스윙이 모두 지수에 패배(Phase 9~13) → 검증된 유일 방향인 지수 추세보유를 코어로.
+# 200일선 ±2% 히스테리시스 밴드. 상승추세 100% / 하락추세 20%로 약세장 방어.
+INDEX_CODE = '069500'        # KODEX 200 (레버리지 원하면 122630)
+INDEX_NAME = 'KODEX 200'
+INDEX_BAND = 0.02            # 200일선 ±2% 밴드(휩쏘 방지)
+INDEX_W_ON = 1.0             # 상승추세 목표 비중
+INDEX_W_OFF = 0.2            # 하락추세 목표 비중(현금 방어)
+INDEX_REBAL_TOL = 0.05       # 목표 비중과 5%p 이내면 매매 생략
+INDEX_PORTFOLIO_FILE = 'portfolio_index.json'   # 테마/인버스 장부와 분리
+INDEX_MAX_STALE_DAYS = 5     # 시세 신선도 허용(달력일)
+
 # --- 공통 리스크 ---
 TIME_STOP_DAYS = 3           # 영업일 기준 보유 상한
 POSITION_SIZE = 500000       # 종목당 진입 금액(원)
