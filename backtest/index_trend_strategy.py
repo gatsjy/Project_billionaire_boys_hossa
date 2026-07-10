@@ -21,10 +21,12 @@ import FinanceDataReader as fdr
 
 try:
     from params import (INDEX_CODE, INDEX_NAME, INDEX_BAND, INDEX_W_ON,
-                        INDEX_W_OFF, INDEX_MAX_STALE_DAYS)
+                        INDEX_W_OFF, INDEX_MAX_STALE_DAYS,
+                        INDEX_USE_ENSEMBLE, INDEX_ENSEMBLE_LOOKBACKS)
 except ImportError:
     from backtest.params import (INDEX_CODE, INDEX_NAME, INDEX_BAND, INDEX_W_ON,
-                                 INDEX_W_OFF, INDEX_MAX_STALE_DAYS)
+                                 INDEX_W_OFF, INDEX_MAX_STALE_DAYS,
+                                 INDEX_USE_ENSEMBLE, INDEX_ENSEMBLE_LOOKBACKS)
 
 
 def replay_trend_state(close: pd.Series, sma: pd.Series, band: float = INDEX_BAND) -> bool:
@@ -40,6 +42,27 @@ def replay_trend_state(close: pd.Series, sma: pd.Series, band: float = INDEX_BAN
         elif c < s * (1 - band):
             state = False
     return state
+
+
+def ensemble_weight(close: pd.Series, lookbacks=INDEX_ENSEMBLE_LOOKBACKS,
+                    band: float = INDEX_BAND, w_off: float = INDEX_W_OFF):
+    """다중 이평 앙상블 목표비중(검증 개선안 B).
+
+    각 룩백 이평의 밴드 히스테리시스 상태(강세/약세)를 평균 → 강세 비율(0~1)을
+    노출 w_off~1.0 으로 연속 매핑. 단일 200MA 취약성·박스장 휩쏘를 완화한다.
+    반환: (target_weight, bull_count, n_lookbacks)
+    """
+    bulls, n = 0, 0
+    for lb in lookbacks:
+        sma = close.rolling(lb).mean()
+        if sma.notna().sum() == 0:
+            continue
+        bulls += 1 if replay_trend_state(close, sma, band) else 0
+        n += 1
+    if n == 0:
+        raise ValueError("앙상블 이평 계산에 필요한 데이터가 부족합니다.")
+    frac = bulls / n
+    return w_off + (INDEX_W_ON - w_off) * frac, bulls, n
 
 
 def _validate(df: pd.DataFrame):
@@ -65,21 +88,31 @@ def get_index_status(code: str = INDEX_CODE):
     last_close = float(df["Close"].iloc[-1])
     last_sma = float(df["SMA_200"].iloc[-1])
     disparity = (last_close - last_sma) / last_sma * 100
-    risk_on = replay_trend_state(df["Close"], df["SMA_200"])
 
-    if risk_on:
-        action, target = "RISK_ON", INDEX_W_ON
-        reason = (f"상승 추세 (종가 {last_close:,.0f} > 200일선 {last_sma:,.0f} 밴드 상단). "
-                  f"{INDEX_NAME} 비중 {INDEX_W_ON:.0%} 유지.")
+    if INDEX_USE_ENSEMBLE:
+        target, bulls, n = ensemble_weight(df["Close"])
+        detail = f"{bulls}/{n} 이평 강세"
     else:
-        action, target = "RISK_OFF", INDEX_W_OFF
-        reason = (f"하락 추세 (종가 {last_close:,.0f} < 200일선 {last_sma:,.0f} 밴드 하단). "
-                  f"{INDEX_NAME} 비중 {INDEX_W_OFF:.0%}로 축소, 현금 방어.")
+        risk_on = replay_trend_state(df["Close"], df["SMA_200"])
+        target = INDEX_W_ON if risk_on else INDEX_W_OFF
+        bulls, n = (n := 1, 1) if risk_on else (0, 1)
+        detail = "200일선 " + ("상단" if risk_on else "하단")
+
+    # 노출 수준으로 액션 라벨(디스플레이용)
+    if target >= INDEX_W_ON - 1e-9:
+        action = "RISK_ON"
+    elif target <= INDEX_W_OFF + 1e-9:
+        action = "RISK_OFF"
+    else:
+        action = "PARTIAL"
+    reason = (f"{detail} · {INDEX_NAME} 목표비중 {target:.0%} "
+              f"(종가 {last_close:,.0f} / 200일선 {last_sma:,.0f}, 이격도 {disparity:+.1f}%). "
+              f"나머지 {1-target:.0%}는 단기채 방어.")
 
     return {
         "code": code, "name": INDEX_NAME,
         "price": last_close, "sma_200": last_sma, "disparity": disparity,
-        "action": action, "target_weight": target, "reason": reason,
+        "action": action, "target_weight": round(target, 4), "reason": reason,
     }
 
 

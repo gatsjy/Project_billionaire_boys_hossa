@@ -58,6 +58,16 @@ INDEX_MAX_STALE_DAYS = 5     # 시세 신선도 허용(달력일)
 # 매도(비중 축소=방어)는 제한 없이 즉시 실행. 0.34면 0→100%가 약 3영업일에 걸쳐 진입.
 INDEX_MAX_BUY_STEP = 0.34
 
+# --- 검증된 개선(index_enhancement_research, Phase 16) ---
+# A. 방어 슬리브: RISK_OFF 비중을 현금(0%) 대신 단기채 ETF에 → 캐리 확보.
+INDEX_BOND_CODE = '153130'          # KODEX 단기채권 (연변동성 0.2%, 현금성)
+INDEX_BOND_NAME = 'KODEX 단기채권'
+# B. 이평 앙상블: 120/150/200일선 강세비율로 목표비중 연속화(단일 200MA 취약성·휩쏘 완화).
+INDEX_USE_ENSEMBLE = True
+INDEX_ENSEMBLE_LOOKBACKS = (120, 150, 200)
+#   [검증치 index_enhancement_research] A+B: 훈련 Calmar 0.21→0.38, 검증 1.07→1.18,
+#   훈련 MDD -20.3%→-15.1%. 양 구간 개선(robust).
+
 # --- 공통 리스크 ---
 TIME_STOP_DAYS = 3           # 영업일 기준 보유 상한
 POSITION_SIZE = 500000       # 종목당 진입 금액(원)
