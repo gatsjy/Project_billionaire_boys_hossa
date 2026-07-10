@@ -62,6 +62,14 @@ INDEX_MAX_BUY_STEP = 0.34
 # A. 방어 슬리브: RISK_OFF 비중을 현금(0%) 대신 단기채 ETF에 → 캐리 확보.
 INDEX_BOND_CODE = '153130'          # KODEX 단기채권 (연변동성 0.2%, 현금성)
 INDEX_BOND_NAME = 'KODEX 단기채권'
+
+# --- 방어 헷지(hedge_research, Phase 17) ---
+# 폭락 시 '오르는' 자산으로 방어 슬리브를 보강. 검증: 미국달러가 최적
+# (KOSPI 폭락일 +0.77%, 방어슬리브 채택 시 검증 MDD -23.4%→-21.2%, Calmar 1.18→1.36).
+# 방어 비중(1-주식)을 헷지(달러):단기채 = HEDGE_FRAC:(1-HEDGE_FRAC)로 분할.
+INDEX_HEDGE_CODE = '261240'         # KODEX 미국달러선물
+INDEX_HEDGE_NAME = 'KODEX 미국달러선물'
+INDEX_HEDGE_FRAC = 0.5              # 방어 중 달러 몫(통화베팅 감안 50:50). 1.0=풀헷지 / 0=단기채만.
 # B. 이평 앙상블: 120/150/200일선 강세비율로 목표비중 연속화(단일 200MA 취약성·휩쏘 완화).
 INDEX_USE_ENSEMBLE = True
 INDEX_ENSEMBLE_LOOKBACKS = (120, 150, 200)

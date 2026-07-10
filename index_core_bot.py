@@ -23,7 +23,8 @@ from backtest.index_trend_strategy import get_index_status
 from backtest.realistic import CostModel
 from backtest.params import (INDEX_CODE, INDEX_NAME, INDEX_REBAL_TOL,
                              INDEX_PORTFOLIO_FILE, INDEX_MAX_BUY_STEP,
-                             INDEX_BOND_CODE, INDEX_BOND_NAME)
+                             INDEX_BOND_CODE, INDEX_BOND_NAME,
+                             INDEX_HEDGE_CODE, INDEX_HEDGE_NAME, INDEX_HEDGE_FRAC)
 from portfolio_manager import load_portfolio, save_portfolio, portfolio_lock
 from notifier.email_sender import send_radar_alert
 
@@ -97,6 +98,7 @@ def run_index_core_bot():
     try:
         st = get_index_status(INDEX_CODE)
         bond_px = float(fdr.DataReader(INDEX_BOND_CODE)["Close"].iloc[-1])
+        hedge_px = float(fdr.DataReader(INDEX_HEDGE_CODE)["Close"].iloc[-1])
     except Exception as e:
         print(f"데이터 조회/검증 실패: {e}")
         return
@@ -113,53 +115,61 @@ def run_index_core_bot():
 
         def qty_of(code):
             return sum(h["qty"] for h in pf["holdings"] if h["code"] == code)
-        eq_qty, bond_qty = qty_of(INDEX_CODE), qty_of(INDEX_BOND_CODE)
 
-        total = pf["cash"] + eq_qty * eq_price + bond_qty * bond_px
-        eq_target_val = eq_target_w * total
-        bond_target_val = (1 - eq_target_w) * total
+        prices = {INDEX_CODE: eq_price, INDEX_HEDGE_CODE: hedge_px, INDEX_BOND_CODE: bond_px}
+        total = pf["cash"] + sum(qty_of(c) * p for c, p in prices.items())
+
+        # 목표: 주식 = 앙상블 비중. 방어(1-주식)는 헷지(달러):단기채로 분할.
+        defensive = (1 - eq_target_w) * total
+        targets = {
+            INDEX_CODE: eq_target_w * total,
+            INDEX_HEDGE_CODE: INDEX_HEDGE_FRAC * defensive,
+            INDEX_BOND_CODE: (1 - INDEX_HEDGE_FRAC) * defensive,
+        }
+        names = {INDEX_CODE: INDEX_NAME, INDEX_HEDGE_CODE: INDEX_HEDGE_NAME, INDEX_BOND_CODE: INDEX_BOND_NAME}
+        caps = {INDEX_CODE: INDEX_MAX_BUY_STEP * total}   # 주식만 분할 상한, 방어는 즉시
         tol_val = INDEX_REBAL_TOL * total
         msgs = []
 
-        # 1) 매도 먼저(현금 확보): 초과분 정리. 주식은 축소=방어이므로 상한 없음.
-        for code, name, price, cur_qty, tgt in (
-                (INDEX_CODE, INDEX_NAME, eq_price, eq_qty, eq_target_val),
-                (INDEX_BOND_CODE, INDEX_BOND_NAME, bond_px, bond_qty, bond_target_val)):
+        legs = [INDEX_CODE, INDEX_HEDGE_CODE, INDEX_BOND_CODE]
+        # 1) 매도 먼저(현금 확보): 각 자산 초과분 정리(상한 없음).
+        for code in legs:
+            price, cur_qty, tgt = prices[code], qty_of(code), targets[code]
             if cur_qty * price - tgt > tol_val:
-                _apply(pf, code, name, price, plan_leg(cur_qty, price, tgt, pf["cash"]), today, msgs)
-
-        # 2) 매수(현금 배분): 주식은 분할 상한, 방어(단기채)는 나머지 현금으로.
-        eq_qty = qty_of(INDEX_CODE)
-        if eq_target_val - eq_qty * eq_price > tol_val:
-            _apply(pf, INDEX_CODE, INDEX_NAME, eq_price,
-                   plan_leg(eq_qty, eq_price, eq_target_val, pf["cash"],
-                            max_buy_val=INDEX_MAX_BUY_STEP * total), today, msgs)
-        bond_qty = qty_of(INDEX_BOND_CODE)
-        if bond_target_val - bond_qty * bond_px > tol_val:
-            _apply(pf, INDEX_BOND_CODE, INDEX_BOND_NAME, bond_px,
-                   plan_leg(bond_qty, bond_px, bond_target_val, pf["cash"]), today, msgs)
+                _apply(pf, code, names[code], price, plan_leg(cur_qty, price, tgt, pf["cash"]), today, msgs)
+        # 2) 매수(현금 배분): 주식은 분할 상한, 헷지·단기채는 나머지 현금으로.
+        for code in legs:
+            price, cur_qty, tgt = prices[code], qty_of(code), targets[code]
+            if tgt - cur_qty * price > tol_val:
+                _apply(pf, code, names[code], price,
+                       plan_leg(cur_qty, price, tgt, pf["cash"], max_buy_val=caps.get(code)), today, msgs)
 
         pf["last_run_time"] = datetime.now().strftime("%Y-%m-%d %H:%M")
         save_portfolio(pf, INDEX_PORTFOLIO_FILE)
 
-        eq_after, bond_after = qty_of(INDEX_CODE), qty_of(INDEX_BOND_CODE)
-        total_after = pf["cash"] + eq_after * eq_price + bond_after * bond_px
+        aft = {c: qty_of(c) for c in legs}
+        total_after = pf["cash"] + sum(aft[c] * prices[c] for c in legs)
 
     trade_msg = "\n".join(msgs) if msgs else "목표 비중 이내 — 매매 없음."
     print(trade_msg)
 
+    def line(code):
+        q, p = aft[code], prices[code]
+        return f"- {names[code]} {q}주 (비중 {(q*p/total_after if total_after else 0):.0%})"
     body = f"""*[지수 추세추종 코어 데일리]*
 {datetime.now():%Y-%m-%d %H:%M}
 
 [판단] {st['action']} · 주식 목표 {eq_target_w:.0%} / 방어 {1-eq_target_w:.0%}
+(방어 = 달러헷지 {INDEX_HEDGE_FRAC:.0%} + 단기채 {1-INDEX_HEDGE_FRAC:.0%})
 {st['reason']}
 
 [리밸런싱]
 {trade_msg}
 
 [포트폴리오] 총자산 {total_after:,.0f}원
-- {INDEX_NAME} {eq_after}주 (비중 {(eq_after*eq_price/total_after if total_after else 0):.0%})
-- {INDEX_BOND_NAME} {bond_after}주 (비중 {(bond_after*bond_px/total_after if total_after else 0):.0%})
+{line(INDEX_CODE)}
+{line(INDEX_HEDGE_CODE)}
+{line(INDEX_BOND_CODE)}
 - 현금 {pf['cash']:,.0f}원
 """
     try:
