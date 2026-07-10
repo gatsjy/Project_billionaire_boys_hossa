@@ -2,62 +2,68 @@ import os
 import json
 from datetime import datetime
 import FinanceDataReader as fdr
-from portfolio_manager import load_portfolio, save_portfolio, log_false_signal
+from portfolio_manager import load_portfolio, save_portfolio, log_false_signal, portfolio_lock
+from backtest.realistic import CostModel
 from notifier.email_sender import send_radar_alert
 
+COST = CostModel()
+
 def liquidate_all():
-    pf = load_portfolio()
-    if not pf['holdings']:
-        print("매도할 종목이 없습니다.")
-        return
-        
     today = datetime.today().strftime('%Y-%m-%d')
     sell_records = []
-    
-    print("전량 수동 매도 진행 중...")
-    
-    for h in pf['holdings']:
-        code = h['code']
-        df = fdr.DataReader(code)
-        if df.empty:
-            continue
-            
-        curr_price = float(df.iloc[-1]['Close'])
-        buy_price = h['buy_price']
-        qty = h['qty']
-        
-        profit_pct = (curr_price - buy_price) / buy_price * 100
-        pf['cash'] += curr_price * qty
-        
-        reason = "수동 전량 매도 (수익 실현/포지션 정리)"
-        trade_record = {
-            "type": "sell",
-            "code": code,
-            "name": h['name'],
-            "buy_date": h['buy_date'],
-            "sell_date": today,
-            "buy_price": buy_price,
-            "sell_price": curr_price,
-            "profit_pct": profit_pct,
-            "reason": reason,
-            "theme": h.get("theme", ""),
-            "trading_value_100m": h.get("trading_value_100m", 0),
-            "buy_time": h.get("buy_time", "")
-        }
-        
-        pf['trade_history'].append(trade_record)
-        sell_records.append(trade_record)
-        
-        # 손실 마감이면 헛방 로거에도 저장
-        if profit_pct < 0:
-            log_false_signal(trade_record)
-            
-        print(f"[{h['name']}] 매도 완료: {curr_price}원 ({profit_pct:.2f}%)")
-        
-    # 모든 종목 삭제
-    pf['holdings'] = []
-    
-    save_portfolio(pf)
+
+    # 데몬(1분 스캔)과 같은 장부를 만지므로 반드시 락으로 보호
+    with portfolio_lock():
+        pf = load_portfolio()
+        if not pf['holdings']:
+            print("매도할 종목이 없습니다.")
+            return
+
+        print("전량 수동 매도 진행 중...")
+
+        for h in pf['holdings']:
+            code = h['code']
+            df = fdr.DataReader(code)
+            if df.empty:
+                continue
+
+            curr_price = float(df.iloc[-1]['Close'])
+            buy_price = h['buy_price']
+            qty = h['qty']
+
+            # 비용 반영 (radar_alert 의 체결 방식과 동일해야 장부가 일관됨)
+            profit_pct = COST.net_return(buy_price, curr_price) * 100
+            pf['cash'] += curr_price * qty * (1 - COST.sell_fee - COST.tax - COST.slippage)
+
+            reason = "수동 전량 매도 (수익 실현/포지션 정리)"
+            trade_record = {
+                "type": "sell",
+                "code": code,
+                "name": h['name'],
+                "buy_date": h['buy_date'],
+                "sell_date": today,
+                "buy_price": buy_price,
+                "sell_price": curr_price,
+                "profit_pct": profit_pct,
+                "reason": reason,
+                "theme": h.get("theme", ""),
+                "trading_value_100m": h.get("trading_value_100m", 0),
+                "buy_time": h.get("buy_time", "")
+            }
+
+            pf['trade_history'].append(trade_record)
+            sell_records.append(trade_record)
+
+            # 손실 마감이면 헛방 로거에도 저장
+            if profit_pct < 0:
+                log_false_signal(trade_record)
+
+            print(f"[{h['name']}] 매도 완료: {curr_price}원 (비용반영 {profit_pct:.2f}%)")
+
+        # 모든 종목 삭제
+        pf['holdings'] = []
+
+        save_portfolio(pf)
     
     # 결과 요약 이메일 생성
     subject = "[수동 개입] 포트폴리오 전량 매도 완료"

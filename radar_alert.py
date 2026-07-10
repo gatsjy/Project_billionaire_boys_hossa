@@ -119,7 +119,17 @@ def run_radar():
             print(f"  [공포점수] {macro['score']}/4 - {macro['recommendation']}")
             for d in macro['details']:
                 print(f"    > {d}")
-            if macro['score'] >= FEAR_SCORE_ENTRY and INVERSE_CODE not in alerted_today:
+            # 재진입 차단은 alert_history(파일, cwd 의존)가 아니라 '장부' 기준으로 판정.
+            # 2026-07-09 인버스가 당일 4회 회전매매(합산 손실)된 원인이 파일 기반 차단의 구멍이었다.
+            # 같은 날 인버스를 이미 사거나 판 기록이 있으면 재진입 금지 → 당일 손절-재매수 루프 차단.
+            inv_traded_today = any(
+                t.get('code') == INVERSE_CODE and
+                (t.get('buy_date') == today or t.get('sell_date') == today)
+                for t in pf['trade_history']
+            )
+            if (macro['score'] >= FEAR_SCORE_ENTRY
+                    and INVERSE_CODE not in alerted_today
+                    and not inv_traded_today):
                 inv = fdr.DataReader(INVERSE_CODE)
                 if not inv.empty:
                     price = int(inv.iloc[-1]['Close'])
@@ -127,6 +137,8 @@ def run_radar():
                     _buy(pf, INVERSE_CODE, "KODEX 인버스", price, today,
                          alerted_today, new_alerts, INVERSE_TP, INVERSE_SL,
                          extra_msg=f"\n[공포점수 {macro['score']}/4]\n{detail}")
+            elif inv_traded_today:
+                print("  [인버스] 오늘 이미 매매 기록 있음 — 재진입 차단(회전매매 방지)")
         except Exception as e:
             print(f"매크로 인버스 스캔 에러: {e}")
 
@@ -159,13 +171,6 @@ def run_radar():
     else:
         print("조건에 부합하는 타점이 없습니다.")
 
-
-    # 실행 종료 시 락 파일 해제
-    if os.path.exists(lock_file):
-        try:
-            os.remove(lock_file)
-        except:
-            pass
 
 if __name__ == "__main__":
     run_radar()
