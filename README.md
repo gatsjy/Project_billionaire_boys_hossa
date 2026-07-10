@@ -60,8 +60,14 @@
 - `kr_event_study.py` — 뉴스/이벤트 회피 전제 검증: **효과 미미(구축 보류)**.
 - `index_enhancement_research.py` — 현행 코어 개선(방어 슬리브+앙상블) 검증.
 
-**은퇴 (파일 보존, 라이브 중단)** — `radar_alert.py`, `start_radar_daemon.py`, `run_daily.py`,
-`backtest/strategy.py`, `backtest/reversal_strategy.py` 등 개별주/인버스 계열.
+**검증 의존 모듈(연구 스크립트가 참조하므로 유지)** — `backtest/strategy.py`(테마 돌파),
+`backtest/reversal_strategy.py`(스윙 반전), `backtest/data_loader.py`.
+
+> 🧹 은퇴한 테마/인버스 **라이브 코드**(`radar_alert.py`, `start_radar_daemon.py`, `run_daily.py`,
+> `liquidate.py`, `backtest/engine.py`·`simulator.py`·`inverse_simulator.py`·`index_strategy.py`·
+> `macro_indicators.py`)와 옛 주변 모듈(kiwoom/crawling/telegram/config), 빌드 캐시·IDE 설정은
+> 2026-07 정리에서 **삭제**했습니다(git 히스토리로 복구 가능). 죽은 전략의 검증 기록은
+> `backtest/*_research.py`와 [progress.md](progress.md)에 남아 있습니다.
 
 <br>
 

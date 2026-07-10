@@ -1,16 +1,30 @@
 {
   "initial_capital": 2000000,
-  "cash": 1601556.0,
+  "cash": 499618.0795999999,
   "holdings": [
     {
       "type": "buy",
-      "code": "114800",
-      "name": "KODEX 인버스",
-      "buy_date": "2026-07-09",
-      "buy_price": 1024.0,
-      "qty": 390,
-      "sl_price": 1003.52,
-      "tp_price": 1075.2
+      "code": "005360",
+      "name": "모나미",
+      "buy_date": "2026-07-10",
+      "buy_price": 2105.0,
+      "qty": 237
+    },
+    {
+      "type": "buy",
+      "code": "008930",
+      "name": "한미사이언스",
+      "buy_date": "2026-07-10",
+      "buy_price": 32250.0,
+      "qty": 15
+    },
+    {
+      "type": "buy",
+      "code": "053050",
+      "name": "지에스이",
+      "buy_date": "2026-07-10",
+      "buy_price": 1889.0,
+      "qty": 264
     }
   ],
   "trade_history": [
@@ -164,6 +178,112 @@
       "qty": 390,
       "sl_price": 1003.52,
       "tp_price": 1075.2
+    },
+    {
+      "type": "sell",
+      "code": "114800",
+      "name": "KODEX 인버스",
+      "buy_date": "2026-07-09",
+      "sell_date": "2026-07-09",
+      "buy_price": 1024.0,
+      "sell_price": 1077.0,
+      "profit_pct": 4.776572371460341,
+      "reason": "익절 (+5%)",
+      "theme": "",
+      "trading_value_100m": 0,
+      "buy_time": ""
+    },
+    {
+      "type": "buy",
+      "code": "114800",
+      "name": "KODEX 인버스",
+      "buy_date": "2026-07-09",
+      "buy_price": 1077.0,
+      "qty": 375,
+      "sl_price": 1055.46,
+      "tp_price": 1130.8500000000001
+    },
+    {
+      "type": "sell",
+      "code": "114800",
+      "name": "KODEX 인버스",
+      "buy_date": "2026-07-09",
+      "sell_date": "2026-07-09",
+      "buy_price": 1077.0,
+      "sell_price": 1053.0,
+      "profit_pct": -2.5995175186418584,
+      "reason": "손절 (-2%)",
+      "theme": "",
+      "trading_value_100m": 0,
+      "buy_time": ""
+    },
+    {
+      "type": "buy",
+      "code": "114800",
+      "name": "KODEX 인버스",
+      "buy_date": "2026-07-10",
+      "buy_price": 1043.0,
+      "qty": 385,
+      "sl_price": 1022.14,
+      "tp_price": 1095.15
+    },
+    {
+      "type": "sell",
+      "code": "114800",
+      "name": "KODEX 인버스",
+      "buy_date": "2026-07-10",
+      "sell_date": "2026-07-10",
+      "buy_price": 1043.0,
+      "sell_price": 1009.0,
+      "profit_pct": -3.627017807756938,
+      "reason": "손절 (-2%)",
+      "theme": "",
+      "trading_value_100m": 0,
+      "buy_time": ""
+    },
+    {
+      "type": "buy",
+      "code": "001210",
+      "name": "금호전기",
+      "buy_date": "2026-07-10",
+      "buy_price": 1500.0,
+      "qty": 333
+    },
+    {
+      "type": "buy",
+      "code": "005360",
+      "name": "모나미",
+      "buy_date": "2026-07-10",
+      "buy_price": 2105.0,
+      "qty": 237
+    },
+    {
+      "type": "buy",
+      "code": "008930",
+      "name": "한미사이언스",
+      "buy_date": "2026-07-10",
+      "buy_price": 32250.0,
+      "qty": 15
+    },
+    {
+      "type": "buy",
+      "code": "053050",
+      "name": "지에스이",
+      "buy_date": "2026-07-10",
+      "buy_price": 1889.0,
+      "qty": 264
+    },
+    {
+      "type": "sell",
+      "code": "001210",
+      "name": "금호전기",
+      "buy_date": "2026-07-10",
+      "sell_date": "2026-07-10",
+      "buy_price": 1500.0,
+      "sell_price": 1455.0,
+      "profit_pct": -3.3681765969135413,
+      "reason": "손절 (-3%)"
     }
-  ]
+  ],
+  "last_eod_date": "2026-07-10"
 }
