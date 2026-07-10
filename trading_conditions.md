@@ -1,5 +1,10 @@
 # ⚙️ 매매 조건 및 전략 명세서 (Trading Conditions & Strategy Spec)
 
+> ⚠️ **[폐기됨 · 역사 기록용]** 이 문서의 테마 단타·인버스 헷징 명세는 2026-07 정직성 개편에서
+> 비용·표본외 검증을 통과하지 못해 **라이브에서 은퇴**했습니다. 현행 라이브 전략은 지수 추세추종
+> 코어이며, 정식 명세는 [README.md](README.md)와 [progress.md](progress.md) §9~16, 파라미터는
+> `backtest/params.py`(INDEX_*)를 참조하세요. 아래 내용은 개편 이전의 설계 기록입니다.
+
 이 문서는 억만장자 보이즈 클럽(Billionaire Boys Club) 봇이 가상 매매 및 실전 매매를 수행할 때 기준이 되는 **모든 매수/매도/헷징/알림 조건**을 상세히 정의한 문서입니다.
 추후 파이썬 코드(`strategy.py`, `index_strategy.py`, `radar_alert.py`)는 모두 이 문서에 적힌 로직을 수학적으로 구현한 것입니다.
 
