@@ -43,6 +43,9 @@ INDEX_W_OFF = 0.2            # 하락추세 목표 비중(현금 방어)
 INDEX_REBAL_TOL = 0.05       # 목표 비중과 5%p 이내면 매매 생략
 INDEX_PORTFOLIO_FILE = 'portfolio_index.json'   # 테마/인버스 장부와 분리
 INDEX_MAX_STALE_DAYS = 5     # 시세 신선도 허용(달력일)
+# 분할 진입(비대칭): 매수(비중 확대)는 1회 최대 이 비중만큼만 → 고점 일괄매수 방지.
+# 매도(비중 축소=방어)는 제한 없이 즉시 실행. 0.34면 0→100%가 약 3영업일에 걸쳐 진입.
+INDEX_MAX_BUY_STEP = 0.34
 
 # --- 공통 리스크 ---
 TIME_STOP_DAYS = 3           # 영업일 기준 보유 상한

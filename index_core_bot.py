@@ -20,7 +20,8 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 from backtest.index_trend_strategy import get_index_status
 from backtest.realistic import CostModel
-from backtest.params import INDEX_CODE, INDEX_NAME, INDEX_REBAL_TOL, INDEX_PORTFOLIO_FILE
+from backtest.params import (INDEX_CODE, INDEX_NAME, INDEX_REBAL_TOL,
+                             INDEX_PORTFOLIO_FILE, INDEX_MAX_BUY_STEP)
 from portfolio_manager import load_portfolio, save_portfolio, portfolio_lock
 from notifier.email_sender import send_radar_alert
 
@@ -29,12 +30,17 @@ ETF_COST = CostModel(tax=0.0)
 INDEX_LOCK = 'portfolio_index.lock'
 
 
-def plan_rebalance(qty, cash, price, target_weight, cost=ETF_COST, tol=INDEX_REBAL_TOL):
-    """목표비중까지의 리밸런싱 계획(비용 반영). 순수 함수."""
+def plan_rebalance(qty, cash, price, target_weight, cost=ETF_COST, tol=INDEX_REBAL_TOL,
+                   max_buy_step=INDEX_MAX_BUY_STEP):
+    """목표비중까지의 리밸런싱 계획(비용 반영). 순수 함수.
+
+    비대칭 분할: 매수(비중 확대)는 1회 max_buy_step 비중까지만(고점 일괄매수 방지),
+    매도(비중 축소=방어)는 제한 없이 즉시. stepped=True면 분할 진입 중.
+    """
     value = qty * price
     total = cash + value
     base = {"current_weight": (value / total if total > 0 else 0.0),
-            "target_weight": target_weight}
+            "target_weight": target_weight, "stepped": False}
     if total <= 0 or price <= 0:
         return {**base, "action": "HOLD", "qty": 0, "eff_price": price, "cash_delta": 0.0}
     gap = target_weight - base["current_weight"]
@@ -42,11 +48,13 @@ def plan_rebalance(qty, cash, price, target_weight, cost=ETF_COST, tol=INDEX_REB
         return {**base, "action": "HOLD", "qty": 0, "eff_price": price, "cash_delta": 0.0}
     if gap > 0:
         eff = price * (1 + cost.buy_fee + cost.slippage)
-        budget = min(gap * total, cash)
+        step = min(gap, max_buy_step)                 # 이번 스텝 비중(분할)
+        budget = min(step * total, cash)
         q = int(budget // eff)
         if q <= 0:
             return {**base, "action": "HOLD", "qty": 0, "eff_price": eff, "cash_delta": 0.0}
-        return {**base, "action": "BUY", "qty": q, "eff_price": eff, "cash_delta": -q * eff}
+        return {**base, "action": "BUY", "qty": q, "eff_price": eff, "cash_delta": -q * eff,
+                "stepped": gap > max_buy_step}
     eff = price * (1 - cost.sell_fee - cost.tax - cost.slippage)
     q = min(qty, int((-gap) * total // price))
     if q <= 0:
@@ -94,7 +102,8 @@ def run_index_core_bot():
                                         "date": today, "price": st["price"],
                                         "eff_price": round(plan["eff_price"], 2),
                                         "qty": plan["qty"], "reason": st["action"]})
-            trade_msg = (f"🔵 리밸런싱 매수 {plan['qty']}주 "
+            step_note = " [분할 진입 중]" if plan.get("stepped") else ""
+            trade_msg = (f"🔵 리밸런싱 매수 {plan['qty']}주{step_note} "
                          f"(비중 {plan['current_weight']:.0%}→목표 {plan['target_weight']:.0%}) "
                          f"실지출 {amt:,.0f}원")
 
