@@ -24,7 +24,8 @@ from backtest.realistic import CostModel
 from backtest.params import (INDEX_CODE, INDEX_NAME, INDEX_REBAL_TOL,
                              INDEX_PORTFOLIO_FILE, INDEX_MAX_BUY_STEP,
                              INDEX_BOND_CODE, INDEX_BOND_NAME,
-                             INDEX_HEDGE_CODE, INDEX_HEDGE_NAME, INDEX_HEDGE_FRAC)
+                             INDEX_HEDGE_CODE, INDEX_HEDGE_NAME, INDEX_HEDGE_FRAC,
+                             INDEX_TAIL_HEDGE_FRAC)
 from portfolio_manager import load_portfolio, save_portfolio, portfolio_lock
 from notifier.email_sender import send_radar_alert
 
@@ -119,11 +120,14 @@ def run_index_core_bot():
         prices = {INDEX_CODE: eq_price, INDEX_HEDGE_CODE: hedge_px, INDEX_BOND_CODE: bond_px}
         total = pf["cash"] + sum(qty_of(c) * p for c, p in prices.items())
 
-        # 목표: 주식 = 앙상블 비중. 방어(1-주식)는 헷지(달러):단기채로 분할.
-        defensive = (1 - eq_target_w) * total
+        # 목표: 상시 tail hedge(항상 달러)를 먼저 떼고, 나머지(base)를 추세로 운용.
+        #   주식 = 앙상블 비중 × base, 방어(1-주식)×base 를 헷지(달러):단기채로 분할.
+        #   헷지 = 상시 + 조건부. → 강세장에도 소액 달러가 초기 급락을 쿠션.
+        base = 1 - INDEX_TAIL_HEDGE_FRAC
+        defensive = (1 - eq_target_w) * base * total
         targets = {
-            INDEX_CODE: eq_target_w * total,
-            INDEX_HEDGE_CODE: INDEX_HEDGE_FRAC * defensive,
+            INDEX_CODE: eq_target_w * base * total,
+            INDEX_HEDGE_CODE: INDEX_TAIL_HEDGE_FRAC * total + INDEX_HEDGE_FRAC * defensive,
             INDEX_BOND_CODE: (1 - INDEX_HEDGE_FRAC) * defensive,
         }
         names = {INDEX_CODE: INDEX_NAME, INDEX_HEDGE_CODE: INDEX_HEDGE_NAME, INDEX_BOND_CODE: INDEX_BOND_NAME}

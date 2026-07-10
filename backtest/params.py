@@ -51,7 +51,7 @@ else:
 INDEX_BAND = 0.02            # 200일선 ±2% 밴드(휩쏘 방지)
 INDEX_W_ON = 1.0             # 상승추세 목표 비중
 INDEX_W_OFF = 0.2            # 하락추세 목표 비중(현금 방어)
-INDEX_REBAL_TOL = 0.05       # 목표 비중과 5%p 이내면 매매 생략
+INDEX_REBAL_TOL = 0.03       # 목표 비중과 3%p 이내면 매매 생략(상시 5% 헷지보다 작아야 헷지가 체결됨)
 INDEX_PORTFOLIO_FILE = 'portfolio_index.json'   # 테마/인버스 장부와 분리
 INDEX_MAX_STALE_DAYS = 5     # 시세 신선도 허용(달력일)
 # 분할 진입(비대칭): 매수(비중 확대)는 1회 최대 이 비중만큼만 → 고점 일괄매수 방지.
@@ -70,6 +70,12 @@ INDEX_BOND_NAME = 'KODEX 단기채권'
 INDEX_HEDGE_CODE = '261240'         # KODEX 미국달러선물
 INDEX_HEDGE_NAME = 'KODEX 미국달러선물'
 INDEX_HEDGE_FRAC = 0.5              # 방어 중 달러 몫(통화베팅 감안 50:50). 1.0=풀헷지 / 0=단기채만.
+
+# 상시 tail hedge(tail_hedge_research, Phase 18): 추세와 무관하게 '항상' 달러를 이만큼 보유
+# → 추세 깨지기 전 '초기 급락'을 쿠션. 강세장 드래그가 있어 소액이 합리적.
+#   [검증치] 상시 5%: 코로나 급락 -14.8%→-13.8%, 검증 Calmar 1.29→1.33 (CAGR 28.0→27.1%).
+#   0=최대수익(끄기) / 0.05~0.10=균형 / 0.15=최대방어(CAGR 25.2%). 보험이지 공짜 아님.
+INDEX_TAIL_HEDGE_FRAC = 0.05
 # B. 이평 앙상블: 120/150/200일선 강세비율로 목표비중 연속화(단일 200MA 취약성·휩쏘 완화).
 INDEX_USE_ENSEMBLE = True
 INDEX_ENSEMBLE_LOOKBACKS = (120, 150, 200)
