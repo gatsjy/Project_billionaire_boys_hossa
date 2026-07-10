@@ -20,6 +20,18 @@ INVERSE_TP = 0.05            # 익절 +5%
 INVERSE_SL = -0.02           # 손절 -2%
 FEAR_SCORE_ENTRY = 2         # 매크로 공포점수 ≥ 2 일 때 인버스 매수
 
+# --- 스윙 반전 전략 (검증 통과 후보 — reversal_research/entry_quality_research) ---
+# 한국 개별주는 단기 모멘텀이 약하고 반전이 강함 → '추격'이 아니라 '눌림 매수'.
+# OOS 기댓값 +0.42~0.49%/매매, PF 1.17, 승률 60~65% (비용 반영). 아직 라이브 미적용.
+REV_RSI_ENTRY = 30           # 진입: RSI(14) < 이 값 (과매도)
+REV_TREND_MA = 60            # 진입: 종가 > N일선 (중기추세 유지 = 떨어지는 칼날 배제)
+REV_ATR_CAP = 8.0            # 진입 제외: 일변동성 ATR% > 이 값 (작전주·펌핑주 회피; 금호전기 20.6%)
+REV_RSI_EXIT = 50            # 청산: RSI 반등 > 이 값 (엣지의 핵심)
+REV_TP = 0.05                # 익절 +5%
+REV_SL = -0.05               # 손절 하한 (실제는 max(5%, 1.5×ATR)로 노이즈 위에서)
+REV_ATR_K = 1.5              # ATR 기반 손절 배수
+REV_HOLD_DAYS = 10           # 영업일 타임아웃
+
 # --- 공통 리스크 ---
 TIME_STOP_DAYS = 3           # 영업일 기준 보유 상한
 POSITION_SIZE = 500000       # 종목당 진입 금액(원)
