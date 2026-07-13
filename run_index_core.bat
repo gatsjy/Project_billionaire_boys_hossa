@@ -7,4 +7,4 @@ cd /d "C:\Users\KNUH\knuh_chatbot\Project_billionaire_boys_hossa"
 if not exist "trading_logs" mkdir "trading_logs"
 echo ================================================================ >> "trading_logs\index_core.log"
 echo [%date% %time%] index_core_bot run >> "trading_logs\index_core.log"
-"C:\Users\KNUH\AppData\Local\Programs\Python\Python311\python.exe" -X utf8 index_core_bot.py >> "trading_logs\index_core.log" 2>&1
+"C:\Users\KNUH\AppData\Local\Programs\Python\Python311\python.exe" -X utf8 index_core_bot.py --source scheduler >> "trading_logs\index_core.log" 2>&1

@@ -21,6 +21,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 from backtest.index_trend_strategy import get_index_status
 from backtest.realistic import CostModel
+from backtest.ledger_audit import audit_ledger
 from backtest.params import (INDEX_CODE, INDEX_NAME, INDEX_REBAL_TOL,
                              INDEX_PORTFOLIO_FILE, INDEX_MAX_BUY_STEP,
                              INDEX_BOND_CODE, INDEX_BOND_NAME,
@@ -59,14 +60,20 @@ def plan_leg(cur_qty, price, target_val, cash_avail, max_buy_val=None, cost=ETF_
         return {"action": "SELL", "qty": q, "eff_price": eff, "cash_delta": q * eff}
 
 
-def _apply(pf, code, name, price, plan, today, msgs):
-    """계획을 장부에 반영하고 사람이 읽는 메시지를 append."""
+def _apply(pf, code, name, price, plan, today, msgs, source="manual"):
+    """계획을 장부에 반영하고 사람이 읽는 메시지를 append.
+
+    ★ 실계좌 연동 대비 회계 규칙: cash_delta 는 'round(eff,2) × qty' 로 계산해
+      기록(eff_price 2dp)과 현금 흐름이 원 단위까지 재생 가능해야 한다(ledger_audit).
+      기록엔 실행 시각·주체(src)도 남긴다 — 무단/이중 실행 추적용.
+    """
     if plan["action"] == "HOLD":
         return
     hold = next((h for h in pf["holdings"] if h["code"] == code), None)
-    eff, q = plan["eff_price"], plan["qty"]
-    pf["cash"] += plan["cash_delta"]
+    eff, q = round(plan["eff_price"], 2), plan["qty"]
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     if plan["action"] == "BUY":
+        pf["cash"] -= q * eff
         if hold:
             tot = hold["buy_price"] * hold["qty"] + q * eff
             hold["qty"] += q
@@ -75,10 +82,11 @@ def _apply(pf, code, name, price, plan, today, msgs):
             pf["holdings"].append({"code": code, "name": name, "buy_price": eff,
                                    "qty": q, "buy_date": today})
         pf["trade_history"].append({"type": "buy", "code": code, "name": name,
-                                    "date": today, "price": price, "eff_price": round(eff, 2),
-                                    "qty": q})
+                                    "date": today, "time": ts, "src": source,
+                                    "price": price, "eff_price": eff, "qty": q})
         msgs.append(f"🔵 {name} 매수 {q}주 ({q*eff:,.0f}원)")
     else:  # SELL
+        pf["cash"] += q * eff
         realized = 0.0
         for h in list(pf["holdings"]):
             if h["code"] != code:
@@ -89,13 +97,14 @@ def _apply(pf, code, name, price, plan, today, msgs):
                 pf["holdings"].remove(h)
             break
         pf["trade_history"].append({"type": "sell", "code": code, "name": name,
-                                    "date": today, "price": price, "eff_price": round(eff, 2),
+                                    "date": today, "time": ts, "src": source,
+                                    "price": price, "eff_price": eff,
                                     "qty": q, "realized_pnl": round(realized, 0)})
         msgs.append(f"🟠 {name} 매도 {q}주 (실현 {realized:+,.0f}원 / 수취 {q*eff:,.0f}원)")
 
 
-def run_index_core_bot():
-    print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] 지수 추세추종 코어 봇 가동...")
+def run_index_core_bot(source="manual"):
+    print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] 지수 추세추종 코어 봇 가동... (source={source})")
     try:
         st = get_index_status(INDEX_CODE)
         bond_px = float(fdr.DataReader(INDEX_BOND_CODE)["Close"].iloc[-1])
@@ -112,6 +121,21 @@ def run_index_core_bot():
         last = pf.get("last_run_time")
         if last and (datetime.now() - datetime.strptime(last, "%Y-%m-%d %H:%M")).total_seconds() < 3600:
             print(f"⚠️ 최근 1시간 내 실행됨({last}). 중복 방지.")
+            return
+
+        # ★ 매매 전 장부 자가감사 — 실계좌 연동 대비 원칙: 검증 안 되는 장부 위에서 매매하지 않는다.
+        ok, issues = audit_ledger(pf)
+        if not ok:
+            print("🔴 장부 감사 실패 — 매매 중단:")
+            for msg in issues[:8]:
+                print(f"   - {msg}")
+            try:
+                send_radar_alert("🔴 [장부 감사 실패] 지수 코어 매매 중단",
+                                 "장부-이력 재생 검증에 실패해 오늘 매매를 중단했습니다.\n\n"
+                                 + "\n".join(f"- {m}" for m in issues[:10])
+                                 + "\n\n장부(portfolio_index.json)를 점검 후 재실행하세요.")
+            except Exception:
+                pass
             return
 
         def qty_of(code):
@@ -140,13 +164,15 @@ def run_index_core_bot():
         for code in legs:
             price, cur_qty, tgt = prices[code], qty_of(code), targets[code]
             if cur_qty * price - tgt > tol_val:
-                _apply(pf, code, names[code], price, plan_leg(cur_qty, price, tgt, pf["cash"]), today, msgs)
+                _apply(pf, code, names[code], price, plan_leg(cur_qty, price, tgt, pf["cash"]),
+                       today, msgs, source)
         # 2) 매수(현금 배분): 주식은 분할 상한, 헷지·단기채는 나머지 현금으로.
         for code in legs:
             price, cur_qty, tgt = prices[code], qty_of(code), targets[code]
             if tgt - cur_qty * price > tol_val:
                 _apply(pf, code, names[code], price,
-                       plan_leg(cur_qty, price, tgt, pf["cash"], max_buy_val=caps.get(code)), today, msgs)
+                       plan_leg(cur_qty, price, tgt, pf["cash"], max_buy_val=caps.get(code)),
+                       today, msgs, source)
 
         pf["last_run_time"] = datetime.now().strftime("%Y-%m-%d %H:%M")
         save_portfolio(pf, INDEX_PORTFOLIO_FILE)
@@ -184,4 +210,10 @@ def run_index_core_bot():
 
 
 if __name__ == "__main__":
-    run_index_core_bot()
+    # 실행주체 기록: 스케줄러 런처는 --source scheduler 를 넘긴다. 그 외는 manual.
+    src = "manual"
+    if "--source" in sys.argv:
+        i = sys.argv.index("--source")
+        if i + 1 < len(sys.argv):
+            src = sys.argv[i + 1]
+    run_index_core_bot(source=src)
