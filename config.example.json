@@ -1,0 +1,16 @@
+{
+  "_안내": "이 파일을 참고해 config.json 에 kiwoom 섹션을 추가하세요. config.json 은 gitignore 되어 깃에 올라가지 않습니다. 앱키/시크릿은 openapi.kiwoom.com 에서 발급 + '모의투자' 신청 후 넣으세요.",
+  "email_config": {
+    "smtp_server": "smtp.naver.com",
+    "smtp_port": 465,
+    "sender_email": "your@naver.com",
+    "sender_password": "네이버 앱비밀번호",
+    "receiver_email": "your@naver.com"
+  },
+  "kiwoom": {
+    "app_key": "여기에 모의투자 앱키",
+    "secret_key": "여기에 모의투자 시크릿키",
+    "account_no": "모의투자 계좌번호(10자리)",
+    "_mode_안내": "실행 모드는 config.json 이 아니라 브로커 생성 시 지정합니다(mock 먼저, live 는 Step3/4 후)."
+  }
+}
