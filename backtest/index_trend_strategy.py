@@ -22,11 +22,20 @@ import FinanceDataReader as fdr
 try:
     from params import (INDEX_CODE, INDEX_NAME, INDEX_BAND, INDEX_W_ON,
                         INDEX_W_OFF, INDEX_MAX_STALE_DAYS,
-                        INDEX_USE_ENSEMBLE, INDEX_ENSEMBLE_LOOKBACKS)
+                        INDEX_USE_ENSEMBLE, INDEX_ENSEMBLE_LOOKBACKS,
+                        INDEX_UNDERLYING, INDEX_DIVERGENCE_TOL,
+                        INDEX_DIVERGENCE_LOOKBACK, INDEX_MAX_DAILY_MOVE)
 except ImportError:
     from backtest.params import (INDEX_CODE, INDEX_NAME, INDEX_BAND, INDEX_W_ON,
                                  INDEX_W_OFF, INDEX_MAX_STALE_DAYS,
-                                 INDEX_USE_ENSEMBLE, INDEX_ENSEMBLE_LOOKBACKS)
+                                 INDEX_USE_ENSEMBLE, INDEX_ENSEMBLE_LOOKBACKS,
+                                 INDEX_UNDERLYING, INDEX_DIVERGENCE_TOL,
+                                 INDEX_DIVERGENCE_LOOKBACK, INDEX_MAX_DAILY_MOVE)
+
+try:
+    from data_integrity import check_index_divergence, check_daily_move, DataIntegrityError
+except ImportError:
+    from backtest.data_integrity import check_index_divergence, check_daily_move, DataIntegrityError
 
 
 def replay_trend_state(close: pd.Series, sma: pd.Series, band: float = INDEX_BAND) -> bool:
@@ -84,6 +93,19 @@ def get_index_status(code: str = INDEX_CODE):
     df = df.copy()
     df["SMA_200"] = df["Close"].rolling(200).mean()
     _validate(df)
+
+    # 시세 무결성 가드 — 데이터 오류/괴리로 실거래가 나가는 것 방지(실계좌 연동 대비).
+    check_daily_move(df["Close"].tolist(), max_move=INDEX_MAX_DAILY_MOVE)   # 절대 백스톱
+    underlying = INDEX_UNDERLYING.get(code)                                  # ETF↔기초지수 괴리
+    if underlying:
+        try:
+            idx = fdr.DataReader(underlying)["Close"]
+        except Exception:
+            idx = None                       # 참조 지수 조회 실패 시 괴리검사만 스킵(매매는 막지 않음)
+        if idx is not None:
+            j = pd.concat([df["Close"].rename("e"), idx.rename("i")], axis=1).dropna()
+            check_index_divergence(j["e"].tolist(), j["i"].tolist(),
+                                   lookback=INDEX_DIVERGENCE_LOOKBACK, tol=INDEX_DIVERGENCE_TOL)
 
     last_close = float(df["Close"].iloc[-1])
     last_sma = float(df["SMA_200"].iloc[-1])

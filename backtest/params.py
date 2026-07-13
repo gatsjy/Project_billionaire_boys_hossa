@@ -54,6 +54,11 @@ INDEX_W_OFF = 0.2            # 하락추세 목표 비중(현금 방어)
 INDEX_REBAL_TOL = 0.03       # 목표 비중과 3%p 이내면 매매 생략(상시 5% 헷지보다 작아야 헷지가 체결됨)
 INDEX_PORTFOLIO_FILE = 'portfolio_index.json'   # 테마/인버스 장부와 분리
 INDEX_MAX_STALE_DAYS = 5     # 시세 신선도 허용(달력일)
+# 시세 무결성 가드(2026-07-13 KODEX200 -9.8% 오류 대응 — data_integrity.py)
+INDEX_UNDERLYING = {'069500': 'KS200', '122630': 'KS200'}  # ETF→기초지수 매핑(괴리 검사용)
+INDEX_DIVERGENCE_TOL = 0.03        # ETF-지수 비율 이탈 허용(3% 초과면 데이터 오류로 매매 중단)
+INDEX_DIVERGENCE_LOOKBACK = 20     # 정상 비율 산정 룩백(거래일)
+INDEX_MAX_DAILY_MOVE = 0.25        # 1배 지수 ETF 일간 변동 절대 상한(초과 시 데이터 오류 의심)
 # 분할 진입(비대칭): 매수(비중 확대)는 1회 최대 이 비중만큼만 → 고점 일괄매수 방지.
 # 매도(비중 축소=방어)는 제한 없이 즉시 실행. 0.34면 0→100%가 약 3영업일에 걸쳐 진입.
 INDEX_MAX_BUY_STEP = 0.34

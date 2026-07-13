@@ -20,6 +20,7 @@ import FinanceDataReader as fdr
 sys.stdout.reconfigure(encoding="utf-8")
 
 from backtest.index_trend_strategy import get_index_status
+from backtest.data_integrity import DataIntegrityError
 from backtest.realistic import CostModel
 from backtest.ledger_audit import audit_ledger
 from backtest.params import (INDEX_CODE, INDEX_NAME, INDEX_REBAL_TOL,
@@ -109,6 +110,17 @@ def run_index_core_bot(source="manual"):
         st = get_index_status(INDEX_CODE)
         bond_px = float(fdr.DataReader(INDEX_BOND_CODE)["Close"].iloc[-1])
         hedge_px = float(fdr.DataReader(INDEX_HEDGE_CODE)["Close"].iloc[-1])
+    except DataIntegrityError as e:
+        # 시세가 신뢰 불가 — 가짜 데이터로 매매하지 않는다(실계좌 연동 시 생명줄).
+        print(f"🔴 시세 무결성 실패 — 매매 중단: {e}")
+        try:
+            send_radar_alert("🔴 [시세 무결성 실패] 지수 코어 매매 중단",
+                             "시세 데이터가 신뢰 불가로 판정되어 오늘 매매를 중단했습니다.\n\n"
+                             f"{e}\n\n브로커 앱에서 실제 시세를 확인하세요. "
+                             "데이터가 정상화되면 다음 실행에서 자동 재개됩니다.")
+        except Exception:
+            pass
+        return
     except Exception as e:
         print(f"데이터 조회/검증 실패: {e}")
         return
